@@ -10,7 +10,7 @@ import {
   type SceneObject,
 } from "./types";
 import { buildPointCloud, detectLive, generateScene } from "./generateScene";
-import { nextSensorX, playingAfterTick, reachedEnd } from "./playback";
+import { nextSensorX, reachedEnd } from "./playback";
 
 type SimState = {
   seed: number;
@@ -24,11 +24,15 @@ type SimState = {
   cameraMode: CameraMode;
   hoveredId: number | null;
   playing: boolean;
+  /** User pause. tick() must not clear this or write playing: true. */
+  paused: boolean;
   detections: Detection[];
   log: LogFrame[];
   visibleCount: number;
   reset: (seed?: number) => void;
   rewind: () => void;
+  pause: () => void;
+  play: () => void;
   setPlaying: (v: boolean) => void;
   setSpeed: (v: number) => void;
   setDensity: (v: number) => void;
@@ -45,6 +49,10 @@ function makeWorld(seed: number, density: number, irregular: boolean) {
   return { seed, objects, cloud };
 }
 
+function liveDetections(objects: SceneObject[], sensorX: number) {
+  return detectLive(objects, sensorX, SENSOR_MIN, SENSOR_RANGE);
+}
+
 export const useSim = create<SimState>((set, get) => ({
   seed: 0,
   objects: [],
@@ -57,6 +65,7 @@ export const useSim = create<SimState>((set, get) => ({
   cameraMode: "drone",
   hoveredId: null,
   playing: true,
+  paused: false,
   detections: [],
   log: [],
   visibleCount: 0,
@@ -67,10 +76,11 @@ export const useSim = create<SimState>((set, get) => ({
       ...next,
       sensorX: 0,
       time: 0,
-      detections: detectLive(next.objects, 0, SENSOR_MIN, SENSOR_RANGE),
+      detections: liveDetections(next.objects, 0),
       log: [],
       visibleCount: 0,
       hoveredId: null,
+      paused: false,
       playing: true,
     });
   },
@@ -80,19 +90,25 @@ export const useSim = create<SimState>((set, get) => ({
     set({
       sensorX: 0,
       time: 0,
-      detections: detectLive(s.objects, 0, SENSOR_MIN, SENSOR_RANGE),
+      detections: liveDetections(s.objects, 0),
       log: [],
       visibleCount: 0,
       hoveredId: null,
+      paused: false,
       playing: true,
     });
   },
-  setPlaying: (playing) => {
-    if (playing && reachedEnd(get().sensorX)) {
+  pause: () => set({ paused: true, playing: false }),
+  play: () => {
+    if (reachedEnd(get().sensorX)) {
       get().rewind();
       return;
     }
-    set({ playing });
+    set({ paused: false, playing: true });
+  },
+  setPlaying: (playing) => {
+    if (playing) get().play();
+    else get().pause();
   },
   setSpeed: (speed) => set({ speed }),
   setDensity: (density) => {
@@ -104,10 +120,11 @@ export const useSim = create<SimState>((set, get) => ({
       density: clamped,
       sensorX: 0,
       time: 0,
-      detections: detectLive(next.objects, 0, SENSOR_MIN, SENSOR_RANGE),
+      detections: liveDetections(next.objects, 0),
       log: [],
       visibleCount: 0,
       hoveredId: null,
+      paused: false,
       playing: true,
     });
   },
@@ -119,10 +136,11 @@ export const useSim = create<SimState>((set, get) => ({
       irregular,
       sensorX: 0,
       time: 0,
-      detections: detectLive(next.objects, 0, SENSOR_MIN, SENSOR_RANGE),
+      detections: liveDetections(next.objects, 0),
       log: [],
       visibleCount: 0,
       hoveredId: null,
+      paused: false,
       playing: true,
     });
   },
@@ -130,11 +148,13 @@ export const useSim = create<SimState>((set, get) => ({
   setHoveredId: (hoveredId) => set({ hoveredId }),
   setVisibleCount: (visibleCount) => set({ visibleCount }),
   tick: (dt) => {
+    // User pause wins over any in-flight frame. Never write playing: true.
+    if (get().paused || !get().playing) return;
     const s = get();
-    if (!s.playing || s.objects.length === 0) return;
+    if (s.objects.length === 0) return;
     const sensorX = nextSensorX(s.sensorX, s.speed, dt);
     const time = s.time + dt;
-    const detections = detectLive(s.objects, sensorX, SENSOR_MIN, SENSOR_RANGE);
+    const detections = liveDetections(s.objects, sensorX);
     const last = s.log[s.log.length - 1];
     const log =
       !last || time - last.time >= 0.12
@@ -148,12 +168,11 @@ export const useSim = create<SimState>((set, get) => ({
             },
           ].slice(-240)
         : s.log;
-    // Only write playing when the run actually ends. Never force-play.
-    const playing = playingAfterTick(s.playing, sensorX);
-    if (playing) {
-      set({ sensorX, time, detections, log });
-    } else {
+    if (get().paused) return;
+    if (reachedEnd(sensorX)) {
       set({ sensorX, time, detections, log, playing: false });
+      return;
     }
+    set({ sensorX, time, detections, log });
   },
 }));

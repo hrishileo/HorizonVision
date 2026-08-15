@@ -40,7 +40,8 @@ export function Hud() {
   const log = useSim((s) => s.log);
   const objects = useSim((s) => s.objects);
   const hoveredId = useSim((s) => s.hoveredId);
-  const setPlaying = useSim((s) => s.setPlaying);
+  const pause = useSim((s) => s.pause);
+  const play = useSim((s) => s.play);
   const setSpeed = useSim((s) => s.setSpeed);
   const setDensity = useSim((s) => s.setDensity);
   const setIrregular = useSim((s) => s.setIrregular);
@@ -71,8 +72,11 @@ export function Hud() {
   }, []);
 
   useEffect(() => {
-    if (objects.length === 0) reset(42817);
-  }, [objects.length, reset]);
+    // One-shot bootstrap only. Do not depend on `reset` — a new function
+    // identity would call reset(42817) again (time=0, playing=true).
+    const s = useSim.getState();
+    if (s.objects.length === 0) s.reset(42817);
+  }, []);
 
   return (
     <div className="hud">
@@ -103,7 +107,11 @@ export function Hud() {
           </div>
         </div>
         <div className="hud-actions">
-          <button type="button" className="btn btn-primary" onClick={() => setPlaying(!playing)}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => (useSim.getState().playing ? pause() : play())}
+          >
             {playing ? <Pause size={16} /> : <Play size={16} />}
             {playing ? "Pause" : "Play"}
           </button>
