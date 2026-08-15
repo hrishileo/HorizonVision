@@ -6,7 +6,9 @@ import {
   SENSOR_RANGE,
   type CameraMode,
   type Detection,
+  type DetectorMetrics,
   type LogFrame,
+  type PredictedDetection,
   type SceneObject,
 } from "./types";
 import { buildPointCloud, detectLive, generateScene } from "./generateScene";
@@ -27,6 +29,8 @@ type SimState = {
   /** User pause. tick() must not clear this or write playing: true. */
   paused: boolean;
   detections: Detection[];
+  predictions: PredictedDetection[];
+  metrics: DetectorMetrics | null;
   log: LogFrame[];
   visibleCount: number;
   reset: (seed?: number) => void;
@@ -40,6 +44,7 @@ type SimState = {
   setCameraMode: (v: CameraMode) => void;
   setHoveredId: (id: number | null) => void;
   setVisibleCount: (n: number) => void;
+  setPredictions: (predictions: PredictedDetection[], metrics: DetectorMetrics | null) => void;
   tick: (dt: number) => void;
 };
 
@@ -67,6 +72,8 @@ export const useSim = create<SimState>((set, get) => ({
   playing: true,
   paused: false,
   detections: [],
+  predictions: [],
+  metrics: null,
   log: [],
   visibleCount: 0,
   reset: (seed) => {
@@ -77,6 +84,8 @@ export const useSim = create<SimState>((set, get) => ({
       sensorX: 0,
       time: 0,
       detections: liveDetections(next.objects, 0),
+      predictions: [],
+      metrics: null,
       log: [],
       visibleCount: 0,
       hoveredId: null,
@@ -91,6 +100,8 @@ export const useSim = create<SimState>((set, get) => ({
       sensorX: 0,
       time: 0,
       detections: liveDetections(s.objects, 0),
+      predictions: [],
+      metrics: null,
       log: [],
       visibleCount: 0,
       hoveredId: null,
@@ -121,6 +132,8 @@ export const useSim = create<SimState>((set, get) => ({
       sensorX: 0,
       time: 0,
       detections: liveDetections(next.objects, 0),
+      predictions: [],
+      metrics: null,
       log: [],
       visibleCount: 0,
       hoveredId: null,
@@ -137,6 +150,8 @@ export const useSim = create<SimState>((set, get) => ({
       sensorX: 0,
       time: 0,
       detections: liveDetections(next.objects, 0),
+      predictions: [],
+      metrics: null,
       log: [],
       visibleCount: 0,
       hoveredId: null,
@@ -147,6 +162,7 @@ export const useSim = create<SimState>((set, get) => ({
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setHoveredId: (hoveredId) => set({ hoveredId }),
   setVisibleCount: (visibleCount) => set({ visibleCount }),
+  setPredictions: (predictions, metrics) => set({ predictions, metrics }),
   tick: (dt) => {
     // User pause wins over any in-flight frame. Never write playing: true.
     if (get().paused || !get().playing) return;

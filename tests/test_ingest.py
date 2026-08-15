@@ -8,6 +8,8 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+import numpy as np
+
 from horizon_vision.ingest.payloads import IngestError, parse_ingest_payload
 from horizon_vision.ingest.replay import replay_fixture
 from horizon_vision.ingest.server import IngestHub, IngestServer
@@ -183,18 +185,18 @@ class FixtureReplayTests(unittest.TestCase):
 
         first = sink.ready[0]
         self.assertAlmostEqual(first["sensor_x"], 10.0)
-        self.assertEqual(first["detections"][0]["label"], "car")
+        self.assertEqual(first["labels"][0]["label"], "car")
+        self.assertEqual(first["detector"], "lidar_cluster")
 
         second = sink.ready[1]
-        self.assertEqual(second["num_detections"], 2)
-        labels = {d["label"] for d in second["detections"]}
+        labels = {d["label"] for d in second["labels"]}
         self.assertEqual(labels, {"car", "van"})
 
         third = sink.ready[2]
-        self.assertEqual(third["detections"][0]["label"], "pedestrian")
+        self.assertEqual(third["labels"][0]["label"], "pedestrian")
         self.assertAlmostEqual(third["sensor_x"], 22.4)
 
-    def test_passthrough_skips_heuristic_when_sim_detections_present(self) -> None:
+    def test_engine_does_not_passthrough_sim_labels(self) -> None:
         fusion = SensorFusion(window_s=0.050)
         hub = IngestHub(fusion)
         hub.accept(
@@ -216,8 +218,77 @@ class FixtureReplayTests(unittest.TestCase):
         fused = fusion.get_fused()
         assert fused is not None
         perception = EdgeAIEngine(device="cpu").process(fused)
-        self.assertEqual(len(perception.detections), 1)
-        self.assertEqual(perception.detections[0].label, "bus")
+        self.assertEqual(perception.labels[0].label, "bus")
+        self.assertEqual(len(perception.detections), 0)
+
+    def test_labels_alias_and_camera_pixels(self) -> None:
+        import base64
+
+        pixels = base64.b64encode(bytes([10, 20, 30, 40, 50, 60])).decode("ascii")
+        parsed = parse_ingest_payload(
+            {
+                "t": 2.0,
+                "sensorX": 1.0,
+                "camera": {"width": 2, "height": 1, "encoding": "rgb8", "pixels": pixels},
+                "lidar": {"points": [[3.0, 0.4, 0.0]]},
+                "labels": [
+                    {
+                        "id": 2,
+                        "label": "car",
+                        "center": [8.0, 0.0, 0.0],
+                        "size": [4.4, 1.8, 1.5],
+                    }
+                ],
+            }
+        )
+        self.assertEqual(parsed.streams, ("camera", "lidar", "detections"))
+        assert parsed.camera is not None
+        self.assertEqual(parsed.camera.encoding, "rgb8")
+        self.assertEqual(parsed.camera.image.shape, (1, 2, 3))
+        self.assertEqual(int(parsed.camera.image[0, 0, 0]), 10)
+        assert parsed.detections is not None
+        self.assertEqual(parsed.detections[0].label, "car")
+
+    def test_predictions_endpoint_returns_detector_boxes(self) -> None:
+        fusion = SensorFusion(window_s=0.050)
+        hub = IngestHub(fusion)
+        server = IngestServer(hub, host="127.0.0.1", port=0)
+        server.start()
+        self.addCleanup(server.stop)
+
+        rng = np.random.default_rng(3)
+        veh = np.stack(
+            [
+                rng.uniform(18.0, 22.0, 80),
+                rng.uniform(0.2, 1.5, 80),
+                rng.uniform(-0.9, 0.9, 80),
+            ],
+            axis=1,
+        ).astype(np.float32)
+        hub.accept(
+            {
+                "t": 4.0,
+                "sensorX": 10.0,
+                "camera": {"width": 8, "height": 8},
+                "lidar": {"points": veh.tolist()},
+                "labels": [
+                    {
+                        "label": "car",
+                        "center": [20.0, 0.0, 0.0],
+                        "size": [4.4, 1.8, 1.5],
+                    }
+                ],
+            }
+        )
+        fused = fusion.get_fused()
+        assert fused is not None
+        perception = EdgeAIEngine(device="cpu").process(fused)
+        hub.publish_perception(perception)
+        body = _get(f"{server.url}/predictions")
+        self.assertEqual(body["detector"], "lidar_cluster")
+        self.assertGreaterEqual(len(body["predictions"]), 1)
+        self.assertEqual(body["labels"][0]["label"], "car")
+        self.assertIsNotNone(body["metrics"])
 
 
 if __name__ == "__main__":

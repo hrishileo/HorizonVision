@@ -9,6 +9,7 @@ import {
   SENSOR_HEIGHT,
   SENSOR_MIN,
   SENSOR_RANGE,
+  type PredictedDetection,
   type SceneObject,
 } from "./types";
 
@@ -138,6 +139,19 @@ function Bounds({
   );
 }
 
+function PredBox({ pred }: { pred: PredictedDetection }) {
+  const [l, w, h] = pred.size;
+  const y = Number.isFinite(pred.center[1]) && pred.center[1] > 0.15 ? pred.center[1] : h / 2;
+  return (
+    <group position={[pred.center[0], y, pred.center[2]]} rotation={[0, pred.yaw, 0]}>
+      <mesh>
+        <boxGeometry args={[l + 0.08, h + 0.08, w + 0.08]} />
+        <meshBasicMaterial color="#7dce82" wireframe transparent opacity={0.95} />
+      </mesh>
+    </group>
+  );
+}
+
 function Sensor() {
   const group = useRef<THREE.Group>(null);
   const x = useSim((s) => s.sensorX);
@@ -252,6 +266,7 @@ function CamRig() {
 function World() {
   const objects = useSim((s) => s.objects);
   const detections = useSim((s) => s.detections);
+  const predictions = useSim((s) => s.predictions);
   const hoveredId = useSim((s) => s.hoveredId);
   const live = useMemo(() => new Set(detections.map((d) => d.id)), [detections]);
 
@@ -268,6 +283,9 @@ function World() {
           <VehicleMesh obj={obj} />
           <Bounds obj={obj} active={live.has(obj.id)} hovered={hoveredId === obj.id} />
         </group>
+      ))}
+      {predictions.map((pred, i) => (
+        <PredBox key={`pred-${i}-${pred.label}`} pred={pred} />
       ))}
       <Sensor />
       <LidarPoints />

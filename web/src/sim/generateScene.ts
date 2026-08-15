@@ -152,6 +152,7 @@ export function buildPointCloud(objects: SceneObject[], seed: number): Float32Ar
   return new Float32Array(pts);
 }
 
+/** Sim labels for train/eval and the HUD. Not a detector — do not feed this to inference. */
 export function detectLive(
   objects: SceneObject[],
   sensorX: number,

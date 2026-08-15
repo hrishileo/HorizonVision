@@ -36,6 +36,8 @@ export function Hud() {
   const irregular = useSim((s) => s.irregular);
   const cameraMode = useSim((s) => s.cameraMode);
   const detections = useSim((s) => s.detections);
+  const predictions = useSim((s) => s.predictions);
+  const metrics = useSim((s) => s.metrics);
   const visibleCount = useSim((s) => s.visibleCount);
   const log = useSim((s) => s.log);
   const objects = useSim((s) => s.objects);
@@ -87,7 +89,7 @@ export function Hud() {
           </p>
           <h1 style={{ margin: "6px 0 4px", fontSize: 18 }}>Live LiDAR + Camera</h1>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            You are the drone. Hover a box to read its class.
+            You are the drone. Cyan boxes are sim labels; green boxes are the LiDAR detector.
           </p>
           <div className="seg" style={{ marginTop: 12 }}>
             <button type="button" className={cameraMode === "drone" ? "on" : ""} onClick={() => setCameraMode("drone")}>
@@ -128,10 +130,10 @@ export function Hud() {
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div className="panel" style={{ minWidth: 260, flex: "1 1 280px", maxWidth: 440 }}>
+        <div className="panel" style={{ minWidth: 260, flex: "1 1 280px", maxWidth: 520 }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
-            <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Live detections</span>
-            <span className="mono live" style={{ fontSize: 12 }}>{detections.length} in range</span>
+            <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Sim labels (GT)</span>
+            <span className="mono accent" style={{ fontSize: 12 }}>{detections.length} in range</span>
           </div>
           {hovered && (
             <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
@@ -139,12 +141,12 @@ export function Hud() {
               <div style={{ textTransform: "capitalize" }}>{hovered.label}</div>
             </div>
           )}
-          <div style={{ maxHeight: 180, overflow: "auto" }}>
+          <div style={{ maxHeight: 110, overflow: "auto" }}>
             {detections.length === 0 ? (
               <p className="muted" style={{ padding: 12 }}>No objects in sensor range.</p>
             ) : (
               detections.map((d) => (
-                <div key={d.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
+                <div key={d.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ textTransform: "capitalize" }}>
                     {d.label}
                     {objects.find((o) => o.id === d.id)?.irregular && (
@@ -155,6 +157,32 @@ export function Hud() {
                     {d.size[0].toFixed(1)}×{d.size[1].toFixed(1)}×{d.size[2].toFixed(1)}
                   </span>
                   <span className="mono accent" style={{ fontSize: 12 }}>{d.distance.toFixed(1)} m</span>
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+            <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Detector</span>
+            <span className="mono pred" style={{ fontSize: 12 }}>
+              {predictions.length} pred
+              {metrics ? `  P ${metrics.precision.toFixed(2)}  R ${metrics.recall.toFixed(2)}  IoU ${metrics.mean_iou.toFixed(2)}` : ""}
+            </span>
+          </div>
+          <div style={{ maxHeight: 90, overflow: "auto" }}>
+            {predictions.length === 0 ? (
+              <p className="muted" style={{ padding: 12 }}>
+                {edgeLive ? "No clusters this frame." : "Start the edge process to see predicted boxes."}
+              </p>
+            ) : (
+              predictions.map((d, i) => (
+                <div key={`p-${i}`} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "6px 12px", borderBottom: "1px solid var(--border)" }}>
+                  <span className="pred" style={{ textTransform: "capitalize" }}>{d.label}</span>
+                  <span className="mono muted" style={{ fontSize: 12 }}>
+                    {d.size[0].toFixed(1)}×{d.size[1].toFixed(1)}×{d.size[2].toFixed(1)}
+                  </span>
+                  <span className="mono pred" style={{ fontSize: 12 }}>
+                    {d.distance != null ? `${d.distance.toFixed(1)} m` : `${d.confidence.toFixed(2)}`}
+                  </span>
                 </div>
               ))
             )}
