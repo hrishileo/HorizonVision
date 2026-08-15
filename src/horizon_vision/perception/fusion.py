@@ -52,7 +52,7 @@ class SensorFusion:
     one exclusive nearest pair whose timestamps fit inside `window_s`.
     """
 
-    def __init__(self, window_s: float = 0.050, max_age_s: float = 0.250):
+    def __init__(self, window_s: float = 0.050, max_age_s: Optional[float] = 0.250):
         self._sync = TimeSynchronizer(
             window_s=window_s,
             required=("camera", "lidar"),

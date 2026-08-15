@@ -38,10 +38,11 @@ def load_config(path: str) -> dict:
 def apply_source_overrides(config: dict, source: str) -> dict:
     """Force sensor types to match --source without rewriting the yaml."""
     sensors = config.setdefault("sensors", {})
-    if source == "web":
+    if source in ("web", "fixture"):
         sensors.setdefault("lidar", {})["type"] = "web"
         sensors.setdefault("camera", {})["type"] = "web"
-        config.setdefault("ingest", {})["enabled"] = True
+        if source == "web":
+            config.setdefault("ingest", {})["enabled"] = True
     elif source == "simulated":
         sensors.setdefault("lidar", {})["type"] = "simulated"
         sensors.setdefault("camera", {})["type"] = "simulated"
@@ -148,7 +149,9 @@ def main():
     lidar.start()
     camera.start()
 
-    fusion = SensorFusion(window_s=window_s)
+    # Fixture timestamps can span seconds; do not age-drop against the newest t.
+    max_age_s = None if source == "fixture" else max(window_s * 5.0, 0.250)
+    fusion = SensorFusion(window_s=window_s, max_age_s=max_age_s)
     hub = IngestHub(fusion)
     ai = EdgeAIEngine(
         device=edge_cfg.get("device", "cuda"),

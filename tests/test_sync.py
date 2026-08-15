@@ -63,7 +63,7 @@ class TimeSynchronizerTests(unittest.TestCase):
         self.assertEqual(self.sync.queue_sizes()["lidar"], 0)
 
     def test_earlier_group_wins_when_spans_tie(self) -> None:
-        self.sync.push("camera", 0.000, "c0")
+        self.sync.push("camera", 0.0, "c0")
         self.sync.push("camera", 0.010, "c1")
         self.sync.push("lidar", 0.005, "l0")
         self.sync.push("lidar", 0.015, "l1")

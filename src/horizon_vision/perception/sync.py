@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Deque, Dict, List, Optional, Sequence, Tuple
 import threading
 
 
@@ -36,7 +36,7 @@ class TimeSynchronizer:
         window_s: float = 0.050,
         required: Sequence[str] = ("camera", "lidar"),
         optional: Sequence[str] = ("detections",),
-        max_age_s: float = 0.250,
+        max_age_s: Optional[float] = 0.250,
         max_queue: int = 64,
     ) -> None:
         if window_s <= 0:
@@ -47,7 +47,7 @@ class TimeSynchronizer:
         self.window_s = float(window_s)
         self.required: Tuple[str, ...] = tuple(required)
         self.optional: Tuple[str, ...] = tuple(optional)
-        self.max_age_s = float(max_age_s)
+        self.max_age_s = None if max_age_s is None else float(max_age_s)
         self.max_queue = int(max_queue)
 
         names = (*self.required, *self.optional)
@@ -93,12 +93,15 @@ class TimeSynchronizer:
         mean timestamp.
         """
         with self._lock:
-            self._drop_stale_unlocked()
+            # Match first so a still-valid pair is not age-dropped on the
+            # same call that could have consumed it.
             if any(len(self._queues[name]) == 0 for name in self.required):
+                self._drop_stale_unlocked()
                 return None
 
             required_match = self._best_required_tuple()
             if required_match is None:
+                self._drop_stale_unlocked()
                 return None
 
             result: Dict[str, TimedSample] = {}
@@ -130,7 +133,8 @@ class TimeSynchronizer:
                 if span > self.window_s:
                     return
                 # Prefer tighter spans, then earlier groups.
-                key = (span, min(ts))
+                # Microseconds avoid float jitter when spans are equal.
+                key = (round(span * 1_000_000), min(ts))
                 if best_key is None or key < best_key:
                     best_key = key
                     best = {
@@ -155,11 +159,13 @@ class TimeSynchronizer:
             return
 
         # Age-out: anything older than newest - max_age can never wait usefully.
-        cutoff = self._newest_ts - self.max_age_s
-        for q in self._queues.values():
-            while q and q[0].timestamp < cutoff:
-                q.popleft()
-                self.dropped += 1
+        # Disabled when max_age_s is None (fixture replay of sparse timestamps).
+        if self.max_age_s is not None:
+            cutoff = self._newest_ts - self.max_age_s
+            for q in self._queues.values():
+                while q and q[0].timestamp < cutoff:
+                    q.popleft()
+                    self.dropped += 1
 
         # Unpairable required samples: every other required stream already
         # has a newer sample past the window, so a future arrival cannot help.
@@ -217,18 +223,3 @@ class TimeSynchronizer:
             if q[-1].timestamp <= sample.timestamp + self.window_s:
                 return True
         return False
-
-
-def drain_matched(sync: TimeSynchronizer, limit: int = 1024) -> List[Dict[str, TimedSample]]:
-    """Pop every currently available match."""
-    out: List[Dict[str, TimedSample]] = []
-    for _ in range(limit):
-        matched = sync.pop_matched()
-        if matched is None:
-            break
-        out.append(matched)
-    return out
-
-
-def stream_names(matched: Iterable[str]) -> Tuple[str, ...]:
-    return tuple(matched)

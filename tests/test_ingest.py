@@ -163,7 +163,7 @@ class IngestHttpTests(unittest.TestCase):
 
 class FixtureReplayTests(unittest.TestCase):
     def test_fixture_produces_synced_frames_with_sim_detections(self) -> None:
-        fusion = SensorFusion(window_s=0.050)
+        fusion = SensorFusion(window_s=0.050, max_age_s=None)
         hub = IngestHub(fusion)
         accepted = replay_fixture(hub, FIXTURE)
         self.assertEqual(accepted, 7)
