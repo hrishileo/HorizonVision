@@ -4,9 +4,15 @@
 
 Horizon Vision captures data from a 3D LiDAR and camera on a drone, processes it on an edge computer (NVIDIA Jetson / similar), and produces structured perception outputs that can be streamed to a phone or car display.
 
+This repo has two layers that share the same product model (sensor + objects + detections):
+
+1. **Python edge pipeline** (`src/horizon_vision/`) — original sensor drivers, fusion, and edge AI skeleton.
+2. **Live 3D web viewer** (`web/`) — interactive drone/third-person sim, traffic density, uniform/irregular scenes, hover labels, and JSON data collection.
+
 ## Current Focus
 - Sensor ingestion (3D LiDAR + Camera)
 - Edge AI perception pipeline
+- Live 3D visualization + detection logging
 - Local mapping foundation
 - Clean architecture ready for ROS 2 / Jetson deployment
 
@@ -18,16 +24,23 @@ HorizonVision/
 │   ├── perception/       # Fusion + Edge AI
 │   ├── mapping/          # Local map building
 │   └── main.py           # Entry point for edge computer
+├── web/                  # Live 3D viewer (this iteration)
 ├── config/               # Sensor & pipeline configuration
-├── launch/               # ROS 2 style launch files (future)
-├── docker/               # Edge deployment containers
-└── docs/
+├── docs/
+└── requirements.txt
 ```
 
 ## Quick Start (Edge Computer)
 ```bash
 pip install -r requirements.txt
 python -m horizon_vision.main --config config/sensors.yaml
+```
+
+## Quick Start (Live 3D Viewer)
+```bash
+cd web
+npm install
+npm run dev
 ```
 
 ## Hardware Target
@@ -37,10 +50,8 @@ python -m horizon_vision.main --config config/sensors.yaml
 
 ## Roadmap
 1. ✅ Sensor interfaces + edge pipeline skeleton
-2. Real LiDAR + camera drivers (ROS 2 / native)
-3. 3D object detection + semantic road segmentation
-4. Local HD map / electronic horizon generation
-5. Streaming to phone / car display (WebRTC + overlays)
-
----
-Private repository for Horizon Vision development.
+2. ✅ Interactive 3D scene + live detection collection
+3. Real LiDAR + camera drivers (ROS 2 / native)
+4. 3D object detection + semantic road segmentation
+5. Local HD map / electronic horizon generation
+6. Streaming to phone / car display (WebRTC + overlays)
