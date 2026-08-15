@@ -1,6 +1,7 @@
-import { useEffect } from "react";
-import { Pause, Play, RotateCcw, Download } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Pause, Play, RotateCcw, Rewind, Download } from "lucide-react";
 import { useSim } from "./store";
+import { healthUrl } from "./edgeIngest";
 
 function downloadLog() {
   const { log, seed, objects, density, irregular } = useSim.getState();
@@ -39,17 +40,43 @@ export function Hud() {
   const log = useSim((s) => s.log);
   const objects = useSim((s) => s.objects);
   const hoveredId = useSim((s) => s.hoveredId);
-  const setPlaying = useSim((s) => s.setPlaying);
+  const pause = useSim((s) => s.pause);
+  const play = useSim((s) => s.play);
   const setSpeed = useSim((s) => s.setSpeed);
   const setDensity = useSim((s) => s.setDensity);
   const setIrregular = useSim((s) => s.setIrregular);
   const setCameraMode = useSim((s) => s.setCameraMode);
   const reset = useSim((s) => s.reset);
+  const rewind = useSim((s) => s.rewind);
   const hovered = objects.find((o) => o.id === hoveredId);
+  const [edgeLive, setEdgeLive] = useState(false);
 
   useEffect(() => {
-    if (objects.length === 0) reset(42817);
-  }, [objects.length, reset]);
+    let cancelled = false;
+    const ping = () => {
+      fetch(healthUrl())
+        .then((r) => r.ok)
+        .then((ok) => {
+          if (!cancelled) setEdgeLive(ok);
+        })
+        .catch(() => {
+          if (!cancelled) setEdgeLive(false);
+        });
+    };
+    ping();
+    const id = window.setInterval(ping, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    // One-shot bootstrap only. Do not depend on `reset` — a new function
+    // identity would call reset(42817) again (time=0, playing=true).
+    const s = useSim.getState();
+    if (s.objects.length === 0) s.reset(42817);
+  }, []);
 
   return (
     <div className="hud">
@@ -79,10 +106,17 @@ export function Hud() {
             </button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button type="button" className="btn btn-primary" onClick={() => setPlaying(!playing)}>
+        <div className="hud-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => (useSim.getState().playing ? pause() : play())}
+          >
             {playing ? <Pause size={16} /> : <Play size={16} />}
             {playing ? "Pause" : "Play"}
+          </button>
+          <button type="button" className="btn" onClick={() => rewind()}>
+            <Rewind size={16} /> Rewind
           </button>
           <button type="button" className="btn" onClick={() => reset()}>
             <RotateCcw size={16} /> New scene
@@ -137,6 +171,10 @@ export function Hud() {
             <div>
               <div className="muted" style={{ fontSize: 12 }}>Status</div>
               <div className={playing ? "live" : "warn"}>{playing ? "Collecting" : "Paused"}</div>
+            </div>
+            <div>
+              <div className="muted" style={{ fontSize: 12 }}>Edge ingest</div>
+              <div className={edgeLive ? "live" : "warn"}>{edgeLive ? "Live" : "Offline"}</div>
             </div>
           </div>
           <label>

@@ -22,16 +22,33 @@ Drone
                      Phone app / car display / partner GPS feeds
 ```
 
-Lab path today: `web/` simulates the drone view and logs detections as JSON.
-Flight path later: see `docs/phone-gps-live.md`.
+Lab path today: `web/` simulates the drone view and POSTs samples to a local
+ingest server on the edge process. Camera + LiDAR + detections are paired
+inside a ~50 ms window (unpaired samples are dropped). Flight path later:
+see `docs/phone-gps-live.md`.
 
-## Current Status (v0.2)
+```
+web/ (sensor dot)  --HTTP POST /ingest-->  edge ingest (127.0.0.1:8765)
+                                              │
+                                              ▼
+                                    TimeSynchronizer (50 ms)
+                                              │
+                                              ▼
+                                    FusedFrame + sim detections
+                                              │
+                                              ▼
+                                    stub sink (synced sample ready)
+```
 
-- Abstract LiDAR and Camera drivers (simulated for now)
-- Sensor fusion package
-- Edge AI engine with placeholder 3D detections
+## Current Status (v0.3)
+
+- Abstract LiDAR and Camera drivers (simulated, or `web` ingest)
+- Exclusive nearest-timestamp fusion (not "latest of each")
+- Local HTTP ingest so the 3D viewer feeds the edge box
+- Edge AI engine: passthrough for sim detections, placeholder otherwise
 - Rolling local map
 - Interactive 3D viewer (`web/`) for drone/third-person, density, irregular traffic
+- Fixture replay path (`--source fixture`) to prove the pipe without a browser
 - Clean entry point ready for real hardware drivers
 
 ## Next Steps

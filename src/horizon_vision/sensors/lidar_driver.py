@@ -110,6 +110,26 @@ class SimulatedLidarDriver(LidarDriver):
         )
 
 
+class WebIngestLidarDriver(LidarDriver):
+    """
+    Point clouds arrive on the HTTP ingest server from the web sim.
+
+    This driver does not invent a scene — `get_point_cloud()` stays
+    empty so the main loop reads fused samples from the ingest hub.
+    """
+
+    def start(self) -> None:
+        self._running = True
+        print("[WebLidar] Waiting for web-sim samples on ingest")
+
+    def stop(self) -> None:
+        self._running = False
+        print("[WebLidar] Stopped")
+
+    def get_point_cloud(self) -> Optional[PointCloud]:
+        return None
+
+
 def create_lidar_driver(config: dict) -> LidarDriver:
     """Factory for LiDAR drivers."""
     lidar_cfg = config.get("sensors", {}).get("lidar", {})
@@ -119,6 +139,9 @@ def create_lidar_driver(config: dict) -> LidarDriver:
 
     if lidar_type == "simulated":
         return SimulatedLidarDriver(frame_id=frame_id, max_range=max_range)
+
+    if lidar_type in ("web", "ingest"):
+        return WebIngestLidarDriver(frame_id=frame_id, max_range=max_range)
 
     # Future real drivers will be added here:
     # elif lidar_type == "livox":

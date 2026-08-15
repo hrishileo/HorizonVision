@@ -117,6 +117,26 @@ class SimulatedCameraDriver(CameraDriver):
         )
 
 
+class WebIngestCameraDriver(CameraDriver):
+    """
+    Camera frames arrive on the HTTP ingest server from the web sim.
+
+    This driver does not invent a scene — `get_frame()` stays empty so
+    the main loop reads fused samples from the ingest hub.
+    """
+
+    def start(self) -> None:
+        self._running = True
+        print("[WebCamera] Waiting for web-sim samples on ingest")
+
+    def stop(self) -> None:
+        self._running = False
+        print("[WebCamera] Stopped")
+
+    def get_frame(self) -> Optional[ImageFrame]:
+        return None
+
+
 def create_camera_driver(config: dict) -> CameraDriver:
     """Factory for camera drivers."""
     cam_cfg = config.get("sensors", {}).get("camera", {})
@@ -127,5 +147,8 @@ def create_camera_driver(config: dict) -> CameraDriver:
 
     if cam_type == "simulated":
         return SimulatedCameraDriver(frame_id=frame_id, width=width, height=height)
+
+    if cam_type in ("web", "ingest"):
+        return WebIngestCameraDriver(frame_id=frame_id, width=width, height=height)
 
     raise ValueError(f"Unsupported camera type: {cam_type}")
