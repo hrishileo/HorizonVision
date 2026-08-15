@@ -11,7 +11,11 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 import time
 import numpy as np
-import cv2
+
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 
 @dataclass
@@ -85,23 +89,25 @@ class SimulatedCameraDriver(CameraDriver):
         # Road
         img[self.height // 2 :, :] = (60, 60, 60)
 
-        # Lane markings
-        for y in range(self.height // 2 + 20, self.height, 40):
-            cv2.rectangle(
-                img,
-                (self.width // 2 - 8, y),
-                (self.width // 2 + 8, y + 20),
-                (220, 220, 220),
-                -1,
-            )
-
-        # Fake vehicle blobs
-        cv2.rectangle(img, (400, 380), (520, 480), (30, 30, 180), -1)
-        cv2.rectangle(img, (750, 400), (900, 500), (20, 120, 40), -1)
-
-        # Add a little noise / movement feel
-        noise = np.random.randint(0, 15, img.shape, dtype=np.uint8)
-        img = cv2.add(img, noise)
+        if cv2 is not None:
+            # Lane markings
+            for y in range(self.height // 2 + 20, self.height, 40):
+                cv2.rectangle(
+                    img,
+                    (self.width // 2 - 8, y),
+                    (self.width // 2 + 8, y + 20),
+                    (220, 220, 220),
+                    -1,
+                )
+            # Fake vehicle blobs
+            cv2.rectangle(img, (400, 380), (520, 480), (30, 30, 180), -1)
+            cv2.rectangle(img, (750, 400), (900, 500), (20, 120, 40), -1)
+            noise = np.random.randint(0, 15, img.shape, dtype=np.uint8)
+            img = cv2.add(img, noise)
+        else:
+            # Fallback without OpenCV
+            img[380:480, 400:520] = (30, 30, 180)
+            img[400:500, 750:900] = (20, 120, 40)
 
         return ImageFrame(
             image=img,
@@ -121,11 +127,5 @@ def create_camera_driver(config: dict) -> CameraDriver:
 
     if cam_type == "simulated":
         return SimulatedCameraDriver(frame_id=frame_id, width=width, height=height)
-
-    # Future:
-    # elif cam_type == "usb":
-    #     return USBCameraDriver(...)
-    # elif cam_type == "csi":
-    #     return CSICameraDriver(...)  # Jetson
 
     raise ValueError(f"Unsupported camera type: {cam_type}")
