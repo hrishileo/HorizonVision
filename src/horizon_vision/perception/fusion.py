@@ -1,9 +1,9 @@
 """
 Sensor fusion with exclusive nearest-timestamp pairing.
 
-Camera + LiDAR (and detections, when present) are matched inside a
+Camera + LiDAR (and optional sim labels) are matched inside a
 real time window. Unpaired samples are dropped — this is not "latest
-of each."
+of each." Sim detections on the fused frame are labels, not AI output.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from horizon_vision.sensors.camera_driver import ImageFrame
 
 @dataclass
 class Detection3D:
-    """Simple 3D detection result (sim passthrough or placeholder AI)."""
+    """3D box. Sim ingest uses this for labels; the detector emits its own."""
 
     label: str
     confidence: float

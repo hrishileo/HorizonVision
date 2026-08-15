@@ -30,6 +30,24 @@ export type Detection = {
   relativeX: number;
 };
 
+export type PredictedDetection = {
+  label: string;
+  confidence: number;
+  center: [number, number, number];
+  size: [number, number, number];
+  yaw: number;
+  distance?: number | null;
+};
+
+export type DetectorMetrics = {
+  precision: number;
+  recall: number;
+  mean_iou: number;
+  tp: number;
+  fp: number;
+  fn: number;
+};
+
 export type LogFrame = {
   time: number;
   sensorX: number;

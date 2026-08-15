@@ -14,7 +14,20 @@ import json
 import threading
 
 from horizon_vision.ingest.payloads import IngestError, parse_ingest_payload
-from horizon_vision.perception.fusion import SensorFusion
+from horizon_vision.perception.edge_ai import PerceptionOutput
+from horizon_vision.perception.fusion import Detection3D, SensorFusion
+
+
+def _box_json(d: Detection3D) -> Dict[str, Any]:
+    return {
+        "id": getattr(d, "object_id", None),
+        "label": d.label,
+        "confidence": float(d.confidence),
+        "center": [float(x) for x in d.center.tolist()],
+        "size": [float(x) for x in d.size.tolist()],
+        "yaw": float(d.yaw),
+        "distance": getattr(d, "distance", None),
+    }
 
 
 class IngestHub:
@@ -25,6 +38,7 @@ class IngestHub:
         self.accepted = 0
         self.rejected = 0
         self._lock = threading.Lock()
+        self._latest: Optional[Dict[str, Any]] = None
 
     def accept(self, payload: Any) -> Dict[str, Any]:
         parsed = parse_ingest_payload(payload)
@@ -48,12 +62,41 @@ class IngestHub:
             "queued": self.fusion.queue_sizes(),
         }
 
+    def publish_perception(self, perception: PerceptionOutput) -> None:
+        """Latest detector output for the viewer (GT labels stay separate)."""
+        payload = {
+            "ok": True,
+            "detector": perception.extras.get("detector", "lidar_cluster"),
+            "timestamp": perception.timestamp,
+            "predictions": [_box_json(d) for d in perception.detections],
+            "labels": [_box_json(d) for d in perception.labels],
+            "metrics": perception.metrics.as_dict() if perception.metrics is not None else None,
+            "num_lidar_points": perception.num_lidar_points,
+        }
+        with self._lock:
+            self._latest = payload
+
+    def latest_predictions(self) -> Dict[str, Any]:
+        with self._lock:
+            if self._latest is None:
+                return {
+                    "ok": True,
+                    "detector": "lidar_cluster",
+                    "predictions": [],
+                    "labels": [],
+                    "metrics": None,
+                }
+            return dict(self._latest)
+
     def health(self) -> Dict[str, Any]:
+        latest = self.latest_predictions()
         return {
             "ok": True,
             "accepted": self.accepted,
             "rejected": self.rejected,
             "queued": self.fusion.queue_sizes(),
+            "detector": latest.get("detector", "lidar_cluster"),
+            "num_predictions": len(latest.get("predictions") or []),
         }
 
 
@@ -65,7 +108,8 @@ def make_handler(hub: IngestHub):
     class IngestHandler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: Any) -> None:
             # Keep the edge loop readable; health polls are noisy.
-            if args and str(args[0]).startswith("GET /health"):
+            path = str(args[0]) if args else ""
+            if path.startswith("GET /health") or path.startswith("GET /predictions"):
                 return
             print(f"[Ingest] {self.address_string()} {fmt % args}")
 
@@ -89,6 +133,10 @@ def make_handler(hub: IngestHub):
             path = urlparse(self.path).path
             if path in ("/health", "/"):
                 status, body = _json_bytes(hub.health())
+                self._write(status, body)
+                return
+            if path in ("/predictions", "/predictions/"):
+                status, body = _json_bytes(hub.latest_predictions())
                 self._write(status, body)
                 return
             self._write(404, json.dumps({"ok": False, "error": "not found"}).encode("utf-8"))

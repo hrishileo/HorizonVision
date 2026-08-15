@@ -1,5 +1,5 @@
 """
-Parse web-sim ingest payloads into camera / LiDAR / detection samples.
+Parse web-sim ingest payloads into camera / LiDAR / label samples.
 
 The web viewer and the fixture replay path share this schema so a
 browser is not required to prove the pipe.
@@ -7,6 +7,7 @@ browser is not required to prove the pipe.
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 from typing import Any, List, Optional, Sequence, Tuple
 
@@ -53,8 +54,13 @@ def parse_ingest_payload(payload: Any) -> ParsedSample:
         lidar = _parse_lidar(payload["lidar"], timestamp)
         streams.append("lidar")
 
-    if "detections" in payload and payload["detections"] is not None:
-        detections = _parse_detections(payload["detections"])
+    # `labels` is the preferred name (sim GT for scoring). `detections`
+    # is accepted so older fixtures and the ingest tests still parse.
+    raw_labels = payload.get("labels")
+    if raw_labels is None:
+        raw_labels = payload.get("detections")
+    if raw_labels is not None:
+        detections = _parse_detections(raw_labels)
         streams.append("detections")
 
     if not streams:
@@ -102,12 +108,42 @@ def _parse_camera(raw: Any, timestamp: float) -> ImageFrame:
     height = int(raw.get("height", 36))
     encoding = str(raw.get("encoding", "stub"))
     sensor_x = _optional_float(raw.get("sensorX", raw.get("sensor_x")), "camera.sensorX")
+    pixels = raw.get("pixels")
+    if pixels:
+        return _camera_from_pixels(pixels, width, height, timestamp, encoding)
     return stub_camera_frame(
         timestamp=timestamp,
         width=width,
         height=height,
         sensor_x=sensor_x,
         encoding=encoding,
+    )
+
+
+def _camera_from_pixels(
+    pixels: Any,
+    width: int,
+    height: int,
+    timestamp: float,
+    encoding: str,
+) -> ImageFrame:
+    if not isinstance(pixels, str) or not pixels:
+        raise IngestError("camera.pixels must be a base64 string")
+    try:
+        raw = base64.b64decode(pixels, validate=False)
+    except (ValueError, TypeError) as exc:
+        raise IngestError("camera.pixels is not valid base64") from exc
+    expected = max(1, width) * max(1, height) * 3
+    if len(raw) != expected:
+        raise IngestError(
+            f"camera.pixels length {len(raw)} != {expected} (width*height*3)"
+        )
+    img = np.frombuffer(raw, dtype=np.uint8).reshape(height, width, 3).copy()
+    return ImageFrame(
+        image=img,
+        timestamp=timestamp,
+        frame_id="camera_link",
+        encoding=encoding or "rgb8",
     )
 
 

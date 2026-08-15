@@ -23,8 +23,9 @@ Drone
 ```
 
 Lab path today: `web/` simulates the drone view and POSTs samples to a local
-ingest server on the edge process. Camera + LiDAR + detections are paired
-inside a ~50 ms window (unpaired samples are dropped). Flight path later:
+ingest server on the edge process. Camera + LiDAR + sim labels are paired
+inside a ~50 ms window (unpaired samples are dropped). The edge detector
+reads only the cloud (and optional image). Flight path later:
 see `docs/phone-gps-live.md`.
 
 ```
@@ -34,18 +35,25 @@ web/ (sensor dot)  --HTTP POST /ingest-->  edge ingest (127.0.0.1:8765)
                                     TimeSynchronizer (50 ms)
                                               │
                                               ▼
-                                    FusedFrame + sim detections
+                         FusedFrame  (points + image + labels)
                                               │
                                               ▼
-                                    stub sink (synced sample ready)
+                         LidarClusterDetector (points only)
+                                              │
+                                              ▼
+                    predictions + P/R/IoU vs labels
+                         │              │
+                         ▼              ▼
+                    stub sink     GET /predictions (viewer)
 ```
 
-## Current Status (v0.3)
+## Current Status (v0.4)
 
 - Abstract LiDAR and Camera drivers (simulated, or `web` ingest)
 - Exclusive nearest-timestamp fusion (not "latest of each")
 - Local HTTP ingest so the 3D viewer feeds the edge box
-- Edge AI engine: passthrough for sim detections, placeholder otherwise
+- Edge AI: Euclidean LiDAR clustering (not a sim-label passthrough)
+- Viewer shows GT (cyan) vs predicted (green) boxes
 - Rolling local map
 - Interactive 3D viewer (`web/`) for drone/third-person, density, irregular traffic
 - Fixture replay path (`--source fixture`) to prove the pipe without a browser
@@ -54,7 +62,7 @@ web/ (sensor dot)  --HTTP POST /ingest-->  edge ingest (127.0.0.1:8765)
 ## Next Steps
 
 1. Replace simulated drivers with real LiDAR (Livox / Velodyne) and camera
-2. Integrate TensorRT or ONNX models for real 3D object detection
+2. Optional learned detector (ONNX / TensorRT) on top of this cluster baseline
 3. Add GNSS/IMU and publish georeferenced events (not simulated XYZ)
 4. Stream events to a Horizon phone app, then partner GPS / electronic horizon
 5. Add ROS 2 wrappers when hardware integration starts
