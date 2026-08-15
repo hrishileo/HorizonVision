@@ -13,17 +13,7 @@ from typing import List, Optional, Dict, Any
 import time
 import numpy as np
 
-from horizon_vision.perception.fusion import FusedFrame
-
-
-@dataclass
-class Detection3D:
-    """Simple 3D detection result."""
-    label: str
-    confidence: float
-    center: np.ndarray          # (3,)
-    size: np.ndarray            # (3,) l,w,h
-    yaw: float = 0.0
+from horizon_vision.perception.fusion import Detection3D, FusedFrame
 
 
 @dataclass
@@ -65,10 +55,15 @@ class EdgeAIEngine:
         if fused.point_cloud is not None:
             pc = fused.point_cloud
             num_points = pc.num_points
-            detections = self._heuristic_vehicle_detections(pc.points)
 
         if fused.image is not None:
             img_shape = fused.image.shape
+
+        if fused.detections:
+            # Web sim already tagged objects in front of the sensor.
+            detections = list(fused.detections)
+        elif fused.point_cloud is not None:
+            detections = self._heuristic_vehicle_detections(fused.point_cloud.points)
 
         dt_ms = (time.perf_counter() - t0) * 1000.0
 

@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Pause, Play, RotateCcw, Download } from "lucide-react";
 import { useSim } from "./store";
+import { healthUrl } from "./edgeIngest";
 
 function downloadLog() {
   const { log, seed, objects, density, irregular } = useSim.getState();
@@ -46,6 +47,27 @@ export function Hud() {
   const setCameraMode = useSim((s) => s.setCameraMode);
   const reset = useSim((s) => s.reset);
   const hovered = objects.find((o) => o.id === hoveredId);
+  const [edgeLive, setEdgeLive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const ping = () => {
+      fetch(healthUrl())
+        .then((r) => r.ok)
+        .then((ok) => {
+          if (!cancelled) setEdgeLive(ok);
+        })
+        .catch(() => {
+          if (!cancelled) setEdgeLive(false);
+        });
+    };
+    ping();
+    const id = window.setInterval(ping, 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     if (objects.length === 0) reset(42817);
@@ -137,6 +159,10 @@ export function Hud() {
             <div>
               <div className="muted" style={{ fontSize: 12 }}>Status</div>
               <div className={playing ? "live" : "warn"}>{playing ? "Collecting" : "Paused"}</div>
+            </div>
+            <div>
+              <div className="muted" style={{ fontSize: 12 }}>Edge ingest</div>
+              <div className={edgeLive ? "live" : "warn"}>{edgeLive ? "Live" : "Offline"}</div>
             </div>
           </div>
           <label>

@@ -1,6 +1,8 @@
 # Horizon Vision — Live 3D viewer (`web/`)
 
-Interactive drone LiDAR + camera simulation. This is the **visualization and data-collection layer** on top of the original Python edge pipeline in `src/horizon_vision/`.
+Interactive drone LiDAR + camera simulation. The moving sensor posts its
+range-gated LiDAR subset, a camera stub, and live detections to the Python
+edge process (`POST http://127.0.0.1:8765/ingest` at ~10 Hz).
 
 Same product model:
 - fused sensor (LiDAR + camera)
@@ -14,6 +16,14 @@ cd web
 npm install
 npm run dev
 ```
+
+To feed the edge box, start the Python ingest first (from the repo root):
+
+```bash
+PYTHONPATH=src python -m horizon_vision.main --source web
+```
+
+See the root README for the two-process walkthrough and the no-browser fixture path.
 
 ## Controls
 - **Drone / Third person** camera
