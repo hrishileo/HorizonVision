@@ -18,6 +18,7 @@ button:not(:disabled) { cursor: pointer; }
 
 .hud { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; pointer-events: none; }
 .panel { pointer-events: auto; background: color-mix(in oklab, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: 16px; backdrop-filter: blur(8px); }
+.hud-actions { pointer-events: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .btn { height: 44px; min-width: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--elevated); color: var(--fg); font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
 .btn-primary { background: var(--fg); color: var(--bg); border-color: transparent; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--elevated); padding: 4px; border-radius: 8px; }
