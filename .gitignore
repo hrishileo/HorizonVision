@@ -55,3 +55,7 @@ models/
 
 # Docker
 *.tar
+
+# web viewer
+web/node_modules/
+web/dist/
