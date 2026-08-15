@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data & logs
+data/
+logs/
+*.log
+*.pcd
+*.bag
+*.mcap
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model weights (large)
+*.pt
+*.onnx
+*.engine
+weights/
+models/
+
+# Docker
+*.tar
