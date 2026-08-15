@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pause, Play, RotateCcw, Download } from "lucide-react";
+import { Pause, Play, RotateCcw, Rewind, Download } from "lucide-react";
 import { useSim } from "./store";
 import { healthUrl } from "./edgeIngest";
 
@@ -46,6 +46,7 @@ export function Hud() {
   const setIrregular = useSim((s) => s.setIrregular);
   const setCameraMode = useSim((s) => s.setCameraMode);
   const reset = useSim((s) => s.reset);
+  const rewind = useSim((s) => s.rewind);
   const hovered = objects.find((o) => o.id === hoveredId);
   const [edgeLive, setEdgeLive] = useState(false);
 
@@ -105,6 +106,9 @@ export function Hud() {
           <button type="button" className="btn btn-primary" onClick={() => setPlaying(!playing)}>
             {playing ? <Pause size={16} /> : <Play size={16} />}
             {playing ? "Pause" : "Play"}
+          </button>
+          <button type="button" className="btn" onClick={() => rewind()}>
+            <Rewind size={16} /> Rewind
           </button>
           <button type="button" className="btn" onClick={() => reset()}>
             <RotateCcw size={16} /> New scene

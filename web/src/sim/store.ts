@@ -10,6 +10,7 @@ import {
   type SceneObject,
 } from "./types";
 import { buildPointCloud, detectLive, generateScene } from "./generateScene";
+import { nextSensorX, playingAfterTick, reachedEnd } from "./playback";
 
 type SimState = {
   seed: number;
@@ -27,6 +28,7 @@ type SimState = {
   log: LogFrame[];
   visibleCount: number;
   reset: (seed?: number) => void;
+  rewind: () => void;
   setPlaying: (v: boolean) => void;
   setSpeed: (v: number) => void;
   setDensity: (v: number) => void;
@@ -72,7 +74,26 @@ export const useSim = create<SimState>((set, get) => ({
       playing: true,
     });
   },
-  setPlaying: (playing) => set({ playing }),
+  rewind: () => {
+    const s = get();
+    if (s.objects.length === 0) return;
+    set({
+      sensorX: 0,
+      time: 0,
+      detections: detectLive(s.objects, 0, SENSOR_MIN, SENSOR_RANGE),
+      log: [],
+      visibleCount: 0,
+      hoveredId: null,
+      playing: true,
+    });
+  },
+  setPlaying: (playing) => {
+    if (playing && reachedEnd(get().sensorX)) {
+      get().rewind();
+      return;
+    }
+    set({ playing });
+  },
   setSpeed: (speed) => set({ speed }),
   setDensity: (density) => {
     const clamped = Math.max(1, Math.min(10, Math.round(density)));
@@ -111,7 +132,7 @@ export const useSim = create<SimState>((set, get) => ({
   tick: (dt) => {
     const s = get();
     if (!s.playing || s.objects.length === 0) return;
-    const sensorX = Math.min(68, s.sensorX + s.speed * dt);
+    const sensorX = nextSensorX(s.sensorX, s.speed, dt);
     const time = s.time + dt;
     const detections = detectLive(s.objects, sensorX, SENSOR_MIN, SENSOR_RANGE);
     const last = s.log[s.log.length - 1];
@@ -127,7 +148,12 @@ export const useSim = create<SimState>((set, get) => ({
             },
           ].slice(-240)
         : s.log;
-    const playing = sensorX < 67.9;
-    set({ sensorX, time, detections, log, playing });
+    // Only write playing when the run actually ends. Never force-play.
+    const playing = playingAfterTick(s.playing, sensorX);
+    if (playing) {
+      set({ sensorX, time, detections, log });
+    } else {
+      set({ sensorX, time, detections, log, playing: false });
+    }
   },
 }));
