@@ -133,6 +133,7 @@ class LidarClusterDetector:
     def __init__(self, params: Optional[ClusterParams] = None, up_axis: Optional[int] = None):
         self.params = params or ClusterParams()
         self.up_axis = up_axis
+        self.last_up_axis = up_axis if up_axis is not None else 1
 
     def detect(
         self,
@@ -150,6 +151,7 @@ class LidarClusterDetector:
             return []
 
         up = self.up_axis if self.up_axis is not None else infer_up_axis(pts)
+        self.last_up_axis = up
         h_axes = _horizontal_axes(up)
         height = pts[:, up]
         elevated = pts[height > self.params.ground_height]
@@ -176,13 +178,22 @@ class LidarClusterDetector:
     ) -> Optional[Detection3D]:
         p = self.params
         xy = cluster[:, list(h_axes)]
+        aa = xy.max(axis=0) - xy.min(axis=0)
+        aa_length = float(max(aa[0], 0.15))
+        aa_width = float(max(aa[1], 0.15))
         yaw = _pca_yaw(xy)
         c, s = float(np.cos(yaw)), float(np.sin(yaw))
         rot = np.array([[c, s], [-s, c]], dtype=np.float32)
         local = (xy - xy.mean(axis=0)) @ rot.T
         extent = local.max(axis=0) - local.min(axis=0)
-        length = float(max(extent[0], 0.15))
-        width = float(max(extent[1], 0.15))
+        pca_length = float(max(extent[0], 0.15))
+        pca_width = float(max(extent[1], 0.15))
+        # Prefer AABB on this static road; keep PCA only when it is clearly tighter.
+        if pca_length * pca_width < 0.85 * aa_length * aa_width:
+            length, width = pca_length, pca_width
+        else:
+            length, width = aa_length, aa_width
+            yaw = 0.0
         zmin = float(cluster[:, up].min())
         zmax = float(cluster[:, up].max())
         height = float(max(zmax - zmin, 0.15))

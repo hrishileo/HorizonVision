@@ -139,6 +139,20 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(metrics.fp, 1)
         self.assertEqual(metrics.fn, 1)
 
+    def test_engine_scores_in_the_cloud_horizontal_plane(self) -> None:
+        points = _isolated_vehicle_cloud()
+        fused = FusedFrame(
+            point_cloud=PointCloud(points=points, timestamp=1.0),
+            image=ImageFrame(image=np.zeros((8, 8, 3), dtype=np.uint8), timestamp=1.0),
+            timestamp=1.0,
+            detections=[_box("car", (20.0, 0.0, 0.0))],
+            sensor_x=10.0,
+        )
+        out = EdgeAIEngine(device="cpu").process(fused)
+        assert out.metrics is not None
+        self.assertGreaterEqual(out.metrics.tp, 1)
+        self.assertGreater(out.metrics.mean_iou, 0.7)
+
     def test_metrics_run_on_cluster_fixture(self) -> None:
         payload = json.loads(CLUSTER_FIXTURE.read_text())
         sample = payload["samples"][0]
@@ -158,7 +172,7 @@ class MetricsTests(unittest.TestCase):
         self.assertGreaterEqual(metrics.tp, 1)
         self.assertGreaterEqual(metrics.precision, 0.99)
         self.assertGreaterEqual(metrics.recall, 0.99)
-        self.assertGreater(metrics.mean_iou, 0.3)
+        self.assertGreater(metrics.mean_iou, 0.7)
 
     def test_fixture_cli_prints_predictions(self) -> None:
         env = os.environ.copy()

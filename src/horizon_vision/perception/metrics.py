@@ -12,7 +12,6 @@ from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from horizon_vision.perception.detector import infer_up_axis
 from horizon_vision.perception.fusion import Detection3D
 
 
@@ -85,10 +84,9 @@ def evaluate_detections(
     up_axis: Optional[int] = None,
 ) -> DetectionMetrics:
     if up_axis is None:
-        pts = []
-        for box in list(predictions) + list(labels):
-            pts.append(np.asarray(box.center, dtype=np.float32))
-        up_axis = infer_up_axis(np.stack(pts)) if pts else 1
+        # Do not infer from a handful of box centers — two aligned cars
+        # look like zero span on X/Z and pick the wrong plane.
+        up_axis = 1
 
     n_pred, n_lab = len(predictions), len(labels)
     if n_pred == 0 and n_lab == 0:

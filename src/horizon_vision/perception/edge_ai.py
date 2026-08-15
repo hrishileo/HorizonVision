@@ -81,7 +81,11 @@ class EdgeAIEngine:
 
         metrics = None
         if labels:
-            metrics = evaluate_detections(detections, labels)
+            metrics = evaluate_detections(
+                detections,
+                labels,
+                up_axis=self.detector.last_up_axis,
+            )
 
         dt_ms = (time.perf_counter() - t0) * 1000.0
 

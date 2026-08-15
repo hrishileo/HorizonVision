@@ -52,16 +52,21 @@ function fillRect(
   }
 }
 
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
 function encodeBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== "undefined") {
-    return Buffer.from(bytes).toString("base64");
+  let out = "";
+  const n = bytes.length;
+  for (let i = 0; i < n; i += 3) {
+    const a = bytes[i]!;
+    const b = i + 1 < n ? bytes[i + 1]! : 0;
+    const c = i + 2 < n ? bytes[i + 2]! : 0;
+    out += B64[a >> 2];
+    out += B64[((a & 3) << 4) | (b >> 4)];
+    out += i + 1 < n ? B64[((b & 15) << 2) | (c >> 6)] : "=";
+    out += i + 2 < n ? B64[c & 63] : "=";
   }
-  let s = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    s += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(s);
+  return out;
 }
 
 /** Pinhole raster of the static scene from the moving sensor. Sensor data, not labels. */
