@@ -34,6 +34,8 @@ export type LogFrame = {
   time: number;
   sensorX: number;
   numPoints: number;
+  occupiedCells: number;
+  blobs: number;
   detections: Detection[];
 };
 

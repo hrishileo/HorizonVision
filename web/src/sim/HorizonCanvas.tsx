@@ -4,11 +4,15 @@ import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useSim } from "./store";
 import {
+  cellCenterWorld,
+  inSensorSweep,
+  type BevConfig,
+  type CellHit,
+} from "./occupancyGrid";
+import {
   ROAD_LENGTH,
   ROAD_WIDTH,
   SENSOR_HEIGHT,
-  SENSOR_MIN,
-  SENSOR_RANGE,
   type SceneObject,
 } from "./types";
 
@@ -201,9 +205,7 @@ function LidarPoints() {
       const x = cloud[i]!;
       const y = cloud[i + 1]!;
       const z = cloud[i + 2]!;
-      const dx = x - sensorX;
-      const dist = Math.hypot(dx, z);
-      if (dx > SENSOR_MIN && dx < SENSOR_RANGE && dist < SENSOR_RANGE && Math.abs(z) < 9) {
+      if (inSensorSweep(x, z, sensorX)) {
         dest[w++] = x;
         dest[w++] = y;
         dest[w++] = z;
@@ -215,6 +217,61 @@ function LidarPoints() {
   });
 
   return <points ref={pointsRef} geometry={geom} material={material} />;
+}
+
+const BEV_INSTANCE_CAP = 24000;
+
+function paintBevInstances(
+  mesh: THREE.InstancedMesh | null,
+  cells: CellHit[],
+  config: BevConfig,
+  sensorX: number,
+  dummy: THREE.Object3D,
+  y: number,
+) {
+  if (!mesh) return;
+  const s = config.cellSize * 0.88;
+  const n = Math.min(cells.length, BEV_INSTANCE_CAP);
+  for (let i = 0; i < n; i++) {
+    const hit = cells[i]!;
+    const { x, z } = cellCenterWorld(hit.ix, hit.iy, sensorX, config);
+    dummy.position.set(x, y, z);
+    dummy.scale.set(s, 1, s);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  mesh.count = n;
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+function BevOverlay() {
+  const occRef = useRef<THREE.InstancedMesh>(null);
+  const freeRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  useEffect(() => {
+    if (occRef.current) occRef.current.count = 0;
+    if (freeRef.current) freeRef.current.count = 0;
+  }, []);
+
+  useFrame(() => {
+    const { bev, sensorX } = useSim.getState();
+    paintBevInstances(freeRef.current, bev.free, bev.config, sensorX, dummy, 0.018);
+    paintBevInstances(occRef.current, bev.occupied, bev.config, sensorX, dummy, 0.034);
+  });
+
+  return (
+    <group>
+      <instancedMesh ref={freeRef} args={[undefined, undefined, BEV_INSTANCE_CAP]} frustumCulled={false}>
+        <boxGeometry args={[1, 0.012, 1]} />
+        <meshBasicMaterial color="#3d8f72" transparent opacity={0.32} depthWrite={false} />
+      </instancedMesh>
+      <instancedMesh ref={occRef} args={[undefined, undefined, BEV_INSTANCE_CAP]} frustumCulled={false}>
+        <boxGeometry args={[1, 0.02, 1]} />
+        <meshBasicMaterial color="#e8b86d" transparent opacity={0.78} depthWrite={false} />
+      </instancedMesh>
+    </group>
+  );
 }
 
 function SimLoop() {
@@ -263,6 +320,7 @@ function World() {
       <directionalLight position={[20, 28, 10]} intensity={1.15} castShadow />
       <ambientLight intensity={0.22} />
       <Road />
+      <BevOverlay />
       {objects.map((obj) => (
         <group key={obj.id}>
           <VehicleMesh obj={obj} />

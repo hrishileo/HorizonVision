@@ -39,11 +39,14 @@ export function Hud() {
   const log = useSim((s) => s.log);
   const objects = useSim((s) => s.objects);
   const hoveredId = useSim((s) => s.hoveredId);
+  const bev = useSim((s) => s.bev);
+  const bevConfig = useSim((s) => s.bevConfig);
   const setPlaying = useSim((s) => s.setPlaying);
   const setSpeed = useSim((s) => s.setSpeed);
   const setDensity = useSim((s) => s.setDensity);
   const setIrregular = useSim((s) => s.setIrregular);
   const setCameraMode = useSim((s) => s.setCameraMode);
+  const setBevCellSize = useSim((s) => s.setBevCellSize);
   const reset = useSim((s) => s.reset);
   const hovered = objects.find((o) => o.id === hoveredId);
 
@@ -60,7 +63,7 @@ export function Hud() {
           </p>
           <h1 style={{ margin: "6px 0 4px", fontSize: 18 }}>Live LiDAR + Camera</h1>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            You are the drone. Hover a box to read its class.
+            You are the drone. Amber cells are occupied, green are free ground.
           </p>
           <div className="seg" style={{ marginTop: 12 }}>
             <button type="button" className={cameraMode === "drone" ? "on" : ""} onClick={() => setCameraMode("drone")}>
@@ -96,8 +99,8 @@ export function Hud() {
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div className="panel" style={{ minWidth: 260, flex: "1 1 280px", maxWidth: 440 }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
-            <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Live detections</span>
-            <span className="mono live" style={{ fontSize: 12 }}>{detections.length} in range</span>
+            <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>BEV detections</span>
+            <span className="mono live" style={{ fontSize: 12 }}>{detections.length} from cells</span>
           </div>
           {hovered && (
             <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
@@ -107,7 +110,7 @@ export function Hud() {
           )}
           <div style={{ maxHeight: 180, overflow: "auto" }}>
             {detections.length === 0 ? (
-              <p className="muted" style={{ padding: 12 }}>No objects in sensor range.</p>
+              <p className="muted" style={{ padding: 12 }}>No occupied objects in the BEV grid.</p>
             ) : (
               detections.map((d) => (
                 <div key={d.id} style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
@@ -132,12 +135,28 @@ export function Hud() {
             <div><div className="muted" style={{ fontSize: 12 }}>Time</div><div className="mono">{time.toFixed(1)} s</div></div>
             <div><div className="muted" style={{ fontSize: 12 }}>Sensor X</div><div className="mono">{sensorX.toFixed(1)} m</div></div>
             <div><div className="muted" style={{ fontSize: 12 }}>LiDAR returns</div><div className="mono">{visibleCount}</div></div>
+            <div><div className="muted" style={{ fontSize: 12 }}>Occupied cells</div><div className="mono warn">{bev.occupied.length}</div></div>
+            <div><div className="muted" style={{ fontSize: 12 }}>Free cells</div><div className="mono live">{bev.free.length}</div></div>
+            <div><div className="muted" style={{ fontSize: 12 }}>BEV blobs</div><div className="mono">{bev.blobs.length}</div></div>
             <div><div className="muted" style={{ fontSize: 12 }}>Vehicles</div><div className="mono">{objects.length}</div></div>
             <div><div className="muted" style={{ fontSize: 12 }}>Frames logged</div><div className="mono">{log.length}</div></div>
             <div>
               <div className="muted" style={{ fontSize: 12 }}>Status</div>
               <div className={playing ? "live" : "warn"}>{playing ? "Collecting" : "Paused"}</div>
             </div>
+          </div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 12 }}>BEV cell {bevConfig.cellSize} m</div>
+          <div className="seg" style={{ marginTop: 6, gridTemplateColumns: "1fr 1fr 1fr" }}>
+            {[0.2, 0.5, 1].map((sz) => (
+              <button
+                key={sz}
+                type="button"
+                className={bevConfig.cellSize === sz ? "on" : ""}
+                onClick={() => setBevCellSize(sz)}
+              >
+                {sz} m
+              </button>
+            ))}
           </div>
           <label>
             Traffic density {density}
