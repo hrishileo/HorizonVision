@@ -82,7 +82,7 @@ export function Hud() {
             </button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+        <div className="hud-actions">
           <button type="button" className="btn btn-primary" onClick={() => setPlaying(!playing)}>
             {playing ? <Pause size={16} /> : <Play size={16} />}
             {playing ? "Pause" : "Play"}
