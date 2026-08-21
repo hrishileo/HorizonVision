@@ -75,12 +75,14 @@ describe("BEV occupancy grid", () => {
   it("attributes from points, not from whether the object center sits in a cell", () => {
     const obj = car({ id: 3, center: [0.4, 0, 0], size: [0.4, 0.4, 1] });
     const pts = new Float32Array([1.5, 0.5, 0]);
-    const grid = rasterizeSweep(pts, new Int32Array([3]), 0, [obj], tiny);
+    // Point-only raster (no GT boxes) so occupancy cannot come from the center.
+    const grid = rasterizeSweep(pts, new Int32Array([3]), 0, [], tiny);
     const centerCell = worldToCell(0.4, 0, 0, grid.config)!;
     const pointCell = worldToCell(1.5, 0, 0, grid.config)!;
     expect(centerCell.ix).not.toBe(pointCell.ix);
     expect(cellState(grid, centerCell.ix, centerCell.iy)).not.toBe("occupied");
     expect(cellState(grid, pointCell.ix, pointCell.iy)).toBe("occupied");
     expect(cellObjectIds(grid, pointCell.ix, pointCell.iy)).toContain(3);
+    expect(detectionsFromGrid(grid, [obj], 0).map((d) => d.id)).toEqual([3]);
   });
 });
