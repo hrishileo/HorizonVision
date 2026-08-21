@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Pause, Play, RotateCcw, Download } from "lucide-react";
+import { Pause, Play, RotateCcw, Download, ChevronDown, ChevronUp } from "lucide-react";
 import { useSim } from "./store";
 
 function downloadLog() {
@@ -47,6 +47,10 @@ export function Hud() {
   const setIrregular = useSim((s) => s.setIrregular);
   const setCameraMode = useSim((s) => s.setCameraMode);
   const setBevCellSize = useSim((s) => s.setBevCellSize);
+  const hudDetectionsOpen = useSim((s) => s.hudDetectionsOpen);
+  const hudStatsOpen = useSim((s) => s.hudStatsOpen);
+  const setHudDetectionsOpen = useSim((s) => s.setHudDetectionsOpen);
+  const setHudStatsOpen = useSim((s) => s.setHudStatsOpen);
   const reset = useSim((s) => s.reset);
   const hovered = objects.find((o) => o.id === hoveredId);
 
@@ -96,11 +100,17 @@ export function Hud() {
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div className="hud-dock">
+        {hudDetectionsOpen ? (
         <div className="panel" style={{ minWidth: 260, flex: "1 1 280px", maxWidth: 440 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
+          <div className="panel-head">
             <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>BEV detections</span>
-            <span className="mono live" style={{ fontSize: 12 }}>{detections.length} from cells</span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <span className="mono live" style={{ fontSize: 12 }}>{detections.length} from cells</span>
+              <button type="button" className="hud-toggle" aria-label="Hide BEV detections" onClick={() => setHudDetectionsOpen(false)}>
+                <ChevronDown size={16} />
+              </button>
+            </span>
           </div>
           {hovered && (
             <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
@@ -129,8 +139,22 @@ export function Hud() {
             )}
           </div>
         </div>
+        ) : (
+          <button type="button" className="hud-chip" aria-label="Show BEV detections" onClick={() => setHudDetectionsOpen(true)}>
+            BEV detections
+            <ChevronUp size={14} />
+          </button>
+        )}
 
-        <div className="panel" style={{ minWidth: 240, flex: "1 1 240px", maxWidth: 360, padding: 12 }}>
+        {hudStatsOpen ? (
+        <div className="panel" style={{ minWidth: 240, flex: "1 1 240px", maxWidth: 360 }}>
+          <div className="panel-head">
+            <span className="muted" style={{ fontSize: 11, textTransform: "uppercase" }}>Sim stats</span>
+            <button type="button" className="hud-toggle" aria-label="Hide sim stats" onClick={() => setHudStatsOpen(false)}>
+              <ChevronDown size={16} />
+            </button>
+          </div>
+          <div style={{ padding: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
             <div><div className="muted" style={{ fontSize: 12 }}>Time</div><div className="mono">{time.toFixed(1)} s</div></div>
             <div><div className="muted" style={{ fontSize: 12 }}>Sensor X</div><div className="mono">{sensorX.toFixed(1)} m</div></div>
@@ -166,7 +190,14 @@ export function Hud() {
             Speed {speed.toFixed(0)} m/s
             <input type="range" min={2} max={14} step={1} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} />
           </label>
+          </div>
         </div>
+        ) : (
+          <button type="button" className="hud-chip" aria-label="Show sim stats" onClick={() => setHudStatsOpen(true)}>
+            Sim stats
+            <ChevronUp size={14} />
+          </button>
+        )}
       </div>
     </div>
   );

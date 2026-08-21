@@ -19,6 +19,12 @@ button:not(:disabled) { cursor: pointer; }
 .hud { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; pointer-events: none; }
 .panel { pointer-events: auto; background: color-mix(in oklab, var(--surface) 92%, transparent); border: 1px solid var(--border); border-radius: 16px; backdrop-filter: blur(8px); }
 .hud-actions { pointer-events: auto; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.hud-dock { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; pointer-events: none; }
+.hud-dock > * { pointer-events: auto; }
+.hud-chip { height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: color-mix(in oklab, var(--surface) 92%, transparent); color: var(--muted); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 8px; backdrop-filter: blur(8px); }
+.hud-toggle { height: 28px; width: 28px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; }
+.hud-toggle:hover { color: var(--fg); background: var(--elevated); }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .btn { height: 44px; min-width: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--elevated); color: var(--fg); font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
 .btn-primary { background: var(--fg); color: var(--bg); border-color: transparent; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--elevated); padding: 4px; border-radius: 8px; }

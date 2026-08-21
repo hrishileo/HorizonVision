@@ -3,6 +3,8 @@ import { useSim } from "../src/sim/store";
 
 beforeEach(() => {
   useSim.getState().reset(42817);
+  useSim.getState().setHudDetectionsOpen(true);
+  useSim.getState().setHudStatsOpen(true);
 });
 
 describe("sim store + BEV", () => {
@@ -45,6 +47,33 @@ describe("sim store + BEV", () => {
     expect(after.sensorX).toBeGreaterThan(20);
     expect(after.bev.occupied.some((c) => c.ix === hit.ix && c.iy === hit.iy)).toBe(true);
     expect(after.bev.occupied.length).toBeGreaterThanOrEqual(first.occupied.length);
+  });
+
+  it("collapsing HUD panels does not break pause", () => {
+    useSim.getState().tick(0.2);
+    useSim.getState().setPlaying(false);
+    useSim.getState().setHudDetectionsOpen(false);
+    useSim.getState().setHudStatsOpen(false);
+    const { sensorX, time } = useSim.getState();
+    expect(useSim.getState().hudDetectionsOpen).toBe(false);
+    expect(useSim.getState().hudStatsOpen).toBe(false);
+
+    for (let i = 0; i < 10; i++) useSim.getState().tick(0.1);
+
+    const after = useSim.getState();
+    expect(after.playing).toBe(false);
+    expect(after.sensorX).toBe(sensorX);
+    expect(after.time).toBe(time);
+    expect(after.hudDetectionsOpen).toBe(false);
+    expect(after.hudStatsOpen).toBe(false);
+  });
+
+  it("keeps HUD collapse across reset", () => {
+    useSim.getState().setHudDetectionsOpen(false);
+    useSim.getState().setHudStatsOpen(false);
+    useSim.getState().reset(42817);
+    expect(useSim.getState().hudDetectionsOpen).toBe(false);
+    expect(useSim.getState().hudStatsOpen).toBe(false);
   });
 
   it("changing cell size rebuilds the grid without resuming play", () => {

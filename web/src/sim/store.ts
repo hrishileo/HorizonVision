@@ -36,6 +36,8 @@ type SimState = {
   visibleCount: number;
   bevConfig: BevConfig;
   bev: OccupancyGrid;
+  hudDetectionsOpen: boolean;
+  hudStatsOpen: boolean;
   reset: (seed?: number) => void;
   setPlaying: (v: boolean) => void;
   setSpeed: (v: number) => void;
@@ -45,6 +47,8 @@ type SimState = {
   setHoveredId: (id: number | null) => void;
   setVisibleCount: (n: number) => void;
   setBevCellSize: (cellSize: number) => void;
+  setHudDetectionsOpen: (v: boolean) => void;
+  setHudStatsOpen: (v: boolean) => void;
   tick: (dt: number) => void;
 };
 
@@ -85,6 +89,8 @@ export const useSim = create<SimState>((set, get) => ({
   visibleCount: 0,
   bevConfig: DEFAULT_BEV_CONFIG,
   bev: emptyOccupancyGrid(),
+  hudDetectionsOpen: true,
+  hudStatsOpen: true,
   reset: (seed) => {
     const { density, irregular, bevConfig } = get();
     const next = makeWorld(seed ?? Math.floor(Math.random() * 1_000_000), density, irregular);
@@ -148,6 +154,8 @@ export const useSim = create<SimState>((set, get) => ({
     const { bev, detections } = refreshBev(s.cloud, s.cloudIds, s.sensorX, s.objects, bevConfig);
     set({ bevConfig, bev, detections });
   },
+  setHudDetectionsOpen: (hudDetectionsOpen) => set({ hudDetectionsOpen }),
+  setHudStatsOpen: (hudStatsOpen) => set({ hudStatsOpen }),
   tick: (dt) => {
     const s = get();
     if (!s.playing || s.objects.length === 0) return;
