@@ -125,14 +125,22 @@ export function generateScene(
   return objects;
 }
 
-export function buildPointCloud(objects: SceneObject[], seed: number): Float32Array {
+export type SimCloud = {
+  positions: Float32Array;
+  /** 0 = ground / unlabeled. Otherwise the SceneObject.id that spawned the return. */
+  objectIds: Int32Array;
+};
+
+export function buildPointCloud(objects: SceneObject[], seed: number): SimCloud {
   const rng = mulberry32(seed + 91);
   const pts: number[] = [];
+  const ids: number[] = [];
 
   for (let i = 0; i < 5200; i++) {
     const x = randRange(rng, 2, ROAD_LENGTH);
     const z = randRange(rng, -ROAD_WIDTH / 2, ROAD_WIDTH / 2);
     pts.push(x, rng() * 0.05, z);
+    ids.push(0);
   }
 
   for (const obj of objects) {
@@ -146,10 +154,11 @@ export function buildPointCloud(objects: SceneObject[], seed: number): Float32Ar
       const lz = randRange(rng, -w / 2, w / 2);
       const ly = randRange(rng, 0.05, h);
       pts.push(obj.center[0] + c * lx - s * lz, ly, obj.center[2] + s * lx + c * lz);
+      ids.push(obj.id);
     }
   }
 
-  return new Float32Array(pts);
+  return { positions: new Float32Array(pts), objectIds: new Int32Array(ids) };
 }
 
 export function detectLive(
