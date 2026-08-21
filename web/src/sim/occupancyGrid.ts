@@ -1,14 +1,18 @@
 /**
  * Metric bird's-eye occupancy grid.
  *
- * Each LiDAR sweep is rasterized onto the ground plane as a spreadsheet of
- * cells (unknown / free / occupied). This is not an image an AI “reads” and
- * not a neural net. Objects are attributed by the points — and, when the sim
- * has ground-truth boxes, the footprint — that touch a cell. Sitting on a
- * cell edge still counts: every touched cell is occupied.
+ * Each LiDAR sweep updates a world-fixed ground-plane spreadsheet of cells
+ * (unknown / free / occupied). The lattice covers the road even with zero
+ * returns. Observed free/occupied cells persist after the sensor moves on;
+ * occupied wins over free. This is not an image an AI “reads” and not a
+ * neural net. Objects are attributed by the points — and, when the sim has
+ * ground-truth boxes, the footprint — that touch a cell. Sitting on a cell
+ * edge still counts: every touched cell is occupied.
  */
 
 import {
+  ROAD_LENGTH,
+  ROAD_WIDTH,
   SENSOR_MIN,
   SENSOR_RANGE,
   type Detection,
@@ -24,10 +28,10 @@ export type CellState = "unknown" | "free" | "occupied";
 
 export type BevConfig = {
   cellSize: number;
-  /** Forward extent in the sensor frame (meters along +X). */
+  /** World X of the lattice origin (road start). */
   xMin: number;
   xMax: number;
-  /** Lateral extent in the sensor frame (meters, web Z). */
+  /** World Z of the lattice origin (left road edge). */
   yMin: number;
   yMax: number;
   /** Returns at or below this height (web Y) count as ground. */
@@ -41,9 +45,9 @@ export type BevConfig = {
 export const DEFAULT_BEV_CONFIG: BevConfig = {
   cellSize: 0.2,
   xMin: 0,
-  xMax: 80,
-  yMin: -20,
-  yMax: 20,
+  xMax: ROAD_LENGTH,
+  yMin: -ROAD_WIDTH / 2,
+  yMax: ROAD_WIDTH / 2,
   groundHeight: 0.08,
   minOccupied: 2,
   sweepLateral: 9,
@@ -109,11 +113,10 @@ export function inSensorSweep(
 export function worldToCell(
   worldX: number,
   worldZ: number,
-  sensorX: number,
   config: BevConfig,
 ): { ix: number; iy: number } | null {
   const { cols, rows } = gridShape(config);
-  const ix = Math.floor((worldX - sensorX - config.xMin) / config.cellSize);
+  const ix = Math.floor((worldX - config.xMin) / config.cellSize);
   const iy = Math.floor((worldZ - config.yMin) / config.cellSize);
   if (ix < 0 || iy < 0 || ix >= cols || iy >= rows) return null;
   return { ix, iy };
@@ -122,13 +125,22 @@ export function worldToCell(
 export function cellCenterWorld(
   ix: number,
   iy: number,
-  sensorX: number,
   config: BevConfig,
 ): { x: number; z: number } {
   return {
-    x: sensorX + config.xMin + (ix + 0.5) * config.cellSize,
+    x: config.xMin + (ix + 0.5) * config.cellSize,
     z: config.yMin + (iy + 0.5) * config.cellSize,
   };
+}
+
+export function sameGridShape(a: BevConfig, b: BevConfig): boolean {
+  return (
+    a.cellSize === b.cellSize &&
+    a.xMin === b.xMin &&
+    a.xMax === b.xMax &&
+    a.yMin === b.yMin &&
+    a.yMax === b.yMax
+  );
 }
 
 export function emptyOccupancyGrid(partial?: Partial<BevConfig>): OccupancyGrid {
@@ -159,7 +171,6 @@ function addObjectId(idSets: Array<Set<number> | undefined>, idx: number, object
 /** Cells whose ground-plane footprint overlaps the object's oriented box. */
 export function footprintCells(
   obj: SceneObject,
-  sensorX: number,
   config: BevConfig,
 ): { ix: number; iy: number }[] {
   const [length, width] = obj.size;
@@ -173,7 +184,7 @@ export function footprintCells(
   const consider = (lx: number, lz: number) => {
     const wx = obj.center[0] + c * lx - s * lz;
     const wz = obj.center[2] + s * lx + c * lz;
-    const cell = worldToCell(wx, wz, sensorX, config);
+    const cell = worldToCell(wx, wz, config);
     if (!cell) return;
     const key = idxOf(cell.ix, cell.iy, cols);
     if (seen.has(key)) return;
@@ -276,7 +287,7 @@ export function rasterizeSweep(
     const x = positions[i * 3]!;
     const y = positions[i * 3 + 1]!;
     const z = positions[i * 3 + 2]!;
-    const cell = worldToCell(x, z, sensorX, config);
+    const cell = worldToCell(x, z, config);
     if (!cell) continue;
     const idx = idxOf(cell.ix, cell.iy, cols);
     const oid = objectIds?.[i] ?? 0;
@@ -294,7 +305,7 @@ export function rasterizeSweep(
   if (objects.length > 0 && seenObjects.size > 0) {
     for (const obj of objects) {
       if (!seenObjects.has(obj.id)) continue;
-      for (const cell of footprintCells(obj, sensorX, config)) {
+      for (const cell of footprintCells(obj, config)) {
         const idx = idxOf(cell.ix, cell.iy, cols);
         elevated[idx] = Math.max(elevated[idx], config.minOccupied);
         addObjectId(idSets, idx, obj.id);
@@ -350,7 +361,65 @@ export function gateSweep(
   return { positions: new Float32Array(xyz), objectIds: new Int32Array(ids) };
 }
 
-/** Range-gate the live cloud, then rasterize. Used by the sim store. */
+/**
+ * Merge a new observation into the world-fixed map.
+ * Unknown observation leaves the prior cell alone. Occupied wins over free.
+ */
+export function integrateSweep(
+  prior: OccupancyGrid,
+  observed: OccupancyGrid,
+  objects: SceneObject[] = [],
+): OccupancyGrid {
+  if (!sameGridShape(prior.config, observed.config) || prior.cols !== observed.cols || prior.rows !== observed.rows) {
+    return observed;
+  }
+
+  const n = prior.states.length;
+  const states = new Uint8Array(n);
+  const idsByIdx = new Map<number, number[]>();
+  for (const hit of prior.occupied) {
+    idsByIdx.set(idxOf(hit.ix, hit.iy, prior.cols), hit.objectIds.slice());
+  }
+  for (const hit of observed.occupied) {
+    const idx = idxOf(hit.ix, hit.iy, observed.cols);
+    const merged = new Set(idsByIdx.get(idx) ?? []);
+    for (const id of hit.objectIds) merged.add(id);
+    idsByIdx.set(idx, [...merged]);
+  }
+
+  for (let i = 0; i < n; i++) {
+    const o = observed.states[i] ?? CELL_UNKNOWN;
+    const p = prior.states[i] ?? CELL_UNKNOWN;
+    if (o === CELL_OCCUPIED || p === CELL_OCCUPIED) states[i] = CELL_OCCUPIED;
+    else if (o === CELL_FREE) states[i] = CELL_FREE;
+    else states[i] = p;
+  }
+
+  const occupied: CellHit[] = [];
+  const free: CellHit[] = [];
+  for (let iy = 0; iy < prior.rows; iy++) {
+    for (let ix = 0; ix < prior.cols; ix++) {
+      const idx = idxOf(ix, iy, prior.cols);
+      if (states[idx] === CELL_OCCUPIED) {
+        occupied.push({ ix, iy, objectIds: idsByIdx.get(idx) ?? [] });
+      } else if (states[idx] === CELL_FREE) {
+        free.push({ ix, iy, objectIds: [] });
+      }
+    }
+  }
+
+  return {
+    config: observed.config,
+    cols: prior.cols,
+    rows: prior.rows,
+    states,
+    occupied,
+    free,
+    blobs: clusterOccupied(states, occupied, prior.cols, prior.rows, objects),
+  };
+}
+
+/** Range-gate the live cloud, then rasterize this sweep only (no persistence). */
 export function rasterizeLidarSweep(
   positions: Float32Array,
   objectIds: Int32Array,
@@ -383,7 +452,7 @@ export function detectionsFromGrid(
   const acc = new Map<number, { sx: number; sz: number; n: number }>();
 
   for (const hit of grid.occupied) {
-    const c = cellCenterWorld(hit.ix, hit.iy, sensorX, grid.config);
+    const c = cellCenterWorld(hit.ix, hit.iy, grid.config);
     for (const id of hit.objectIds) {
       const cur = acc.get(id) ?? { sx: 0, sz: 0, n: 0 };
       cur.sx += c.x;

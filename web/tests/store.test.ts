@@ -33,6 +33,20 @@ describe("sim store + BEV", () => {
     }
   });
 
+  it("keeps occupied cells after the sensor drives past them", () => {
+    useSim.getState().tick(0.3);
+    const first = useSim.getState().bev;
+    expect(first.occupied.length).toBeGreaterThan(0);
+    const hit = first.occupied[0]!;
+
+    for (let i = 0; i < 80; i++) useSim.getState().tick(0.2);
+
+    const after = useSim.getState();
+    expect(after.sensorX).toBeGreaterThan(20);
+    expect(after.bev.occupied.some((c) => c.ix === hit.ix && c.iy === hit.iy)).toBe(true);
+    expect(after.bev.occupied.length).toBeGreaterThanOrEqual(first.occupied.length);
+  });
+
   it("changing cell size rebuilds the grid without resuming play", () => {
     useSim.getState().setPlaying(false);
     const { sensorX, time } = useSim.getState();

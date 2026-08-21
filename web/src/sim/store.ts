@@ -3,6 +3,7 @@ import {
   DEFAULT_BEV_CONFIG,
   detectionsFromGrid,
   emptyOccupancyGrid,
+  integrateSweep,
   rasterizeLidarSweep,
   type BevConfig,
   type OccupancyGrid,
@@ -59,8 +60,10 @@ function refreshBev(
   sensorX: number,
   objects: SceneObject[],
   bevConfig: BevConfig,
+  prior?: OccupancyGrid,
 ) {
-  const bev = rasterizeLidarSweep(cloud, cloudIds, sensorX, objects, bevConfig);
+  const observed = rasterizeLidarSweep(cloud, cloudIds, sensorX, objects, bevConfig);
+  const bev = prior ? integrateSweep(prior, observed, objects) : observed;
   return { bev, detections: detectionsFromGrid(bev, objects, sensorX) };
 }
 
@@ -150,7 +153,14 @@ export const useSim = create<SimState>((set, get) => ({
     if (!s.playing || s.objects.length === 0) return;
     const sensorX = Math.min(68, s.sensorX + s.speed * dt);
     const time = s.time + dt;
-    const { bev, detections } = refreshBev(s.cloud, s.cloudIds, sensorX, s.objects, s.bevConfig);
+    const { bev, detections } = refreshBev(
+      s.cloud,
+      s.cloudIds,
+      sensorX,
+      s.objects,
+      s.bevConfig,
+      s.bev,
+    );
     const last = s.log[s.log.length - 1];
     const log =
       !last || time - last.time >= 0.12

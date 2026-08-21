@@ -8,6 +8,7 @@ import {
   inSensorSweep,
   type BevConfig,
   type CellHit,
+  type OccupancyGrid,
 } from "./occupancyGrid";
 import {
   ROAD_LENGTH,
@@ -219,13 +220,45 @@ function LidarPoints() {
   return <points ref={pointsRef} geometry={geom} material={material} />;
 }
 
-const BEV_INSTANCE_CAP = 24000;
+const BEV_INSTANCE_CAP = 28000;
+
+function buildLatticeGeometry(config: BevConfig): THREE.BufferGeometry {
+  const { cellSize, xMin, xMax, yMin, yMax } = config;
+  const cols = Math.max(1, Math.round((xMax - xMin) / cellSize));
+  const rows = Math.max(1, Math.round((yMax - yMin) / cellSize));
+  const y = 0.022;
+  const positions: number[] = [];
+  for (let i = 0; i <= cols; i++) {
+    const x = xMin + i * cellSize;
+    positions.push(x, y, yMin, x, y, yMax);
+  }
+  for (let j = 0; j <= rows; j++) {
+    const z = yMin + j * cellSize;
+    positions.push(xMin, y, z, xMax, y, z);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return geom;
+}
+
+function BevLattice() {
+  const bevConfig = useSim((s) => s.bevConfig);
+  const geom = useMemo(
+    () => buildLatticeGeometry(bevConfig),
+    [bevConfig.cellSize, bevConfig.xMin, bevConfig.xMax, bevConfig.yMin, bevConfig.yMax],
+  );
+  useEffect(() => () => geom.dispose(), [geom]);
+  return (
+    <lineSegments geometry={geom} frustumCulled={false}>
+      <lineBasicMaterial color="#8a8a96" transparent opacity={0.42} depthWrite={false} fog={false} />
+    </lineSegments>
+  );
+}
 
 function paintBevInstances(
   mesh: THREE.InstancedMesh | null,
   cells: CellHit[],
   config: BevConfig,
-  sensorX: number,
   dummy: THREE.Object3D,
   y: number,
 ) {
@@ -234,7 +267,7 @@ function paintBevInstances(
   const n = Math.min(cells.length, BEV_INSTANCE_CAP);
   for (let i = 0; i < n; i++) {
     const hit = cells[i]!;
-    const { x, z } = cellCenterWorld(hit.ix, hit.iy, sensorX, config);
+    const { x, z } = cellCenterWorld(hit.ix, hit.iy, config);
     dummy.position.set(x, y, z);
     dummy.scale.set(s, 1, s);
     dummy.updateMatrix();
@@ -248,6 +281,7 @@ function BevOverlay() {
   const occRef = useRef<THREE.InstancedMesh>(null);
   const freeRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const lastBev = useRef<OccupancyGrid | null>(null);
 
   useEffect(() => {
     if (occRef.current) occRef.current.count = 0;
@@ -255,13 +289,16 @@ function BevOverlay() {
   }, []);
 
   useFrame(() => {
-    const { bev, sensorX } = useSim.getState();
-    paintBevInstances(freeRef.current, bev.free, bev.config, sensorX, dummy, 0.018);
-    paintBevInstances(occRef.current, bev.occupied, bev.config, sensorX, dummy, 0.034);
+    const { bev } = useSim.getState();
+    if (bev === lastBev.current) return;
+    lastBev.current = bev;
+    paintBevInstances(freeRef.current, bev.free, bev.config, dummy, 0.018);
+    paintBevInstances(occRef.current, bev.occupied, bev.config, dummy, 0.034);
   });
 
   return (
     <group>
+      <BevLattice />
       <instancedMesh ref={freeRef} args={[undefined, undefined, BEV_INSTANCE_CAP]} frustumCulled={false}>
         <boxGeometry args={[1, 0.012, 1]} />
         <meshBasicMaterial color="#3d8f72" transparent opacity={0.32} depthWrite={false} />
