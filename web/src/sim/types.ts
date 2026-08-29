@@ -6,7 +6,9 @@ export type ObjectLabel =
   | "motorcycle"
   | "pedestrian";
 
-export type CameraMode = "drone" | "third";
+export type CameraMode = "drone" | "third" | "bev";
+
+export type WorldKind = "city" | "forest" | "open";
 
 export type IrregularKind = "lane-departure" | "pedestrian-in-road";
 
@@ -51,11 +53,12 @@ export const OBJECT_SPECS: Record<
   pedestrian: { size: [[0.55, 0.65], [0.5, 0.6], [1.6, 1.8]], color: "#d4b896" },
 };
 
-export const ROAD_LENGTH = 78;
-export const ROAD_WIDTH = 12;
+export const ROAD_LENGTH = 120;
+export const ROAD_WIDTH = 33;
 export const SENSOR_HEIGHT = 1.5;
-export const SENSOR_RANGE = 48;
+export const SENSOR_RANGE = 56;
 export const SENSOR_MIN = 2;
 export const DEFAULT_SPEED = 6;
 export const DEFAULT_DENSITY = 5;
-export const LANE_Z = [-3.3, 3.3] as const;
+export const LANE_Z = [-14.4, -10.55, -6.7, 6.7, 10.55, 14.4] as const;
+export const END_X = 108;

@@ -11,72 +11,7 @@ import {
   type OccupancyGrid,
 } from "./occupancyGrid";
 import { SENSOR_HEIGHT, type SceneObject } from "./types";
-import { localMap, ringAabb } from "./map/intersection";
-
-function PolyPlane({
-  ring,
-  y,
-  color,
-}: {
-  ring: [number, number][];
-  y: number;
-  color: string;
-}) {
-  const b = ringAabb(ring);
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[b.cx, y, b.cz]} receiveShadow>
-      <planeGeometry args={[b.sx, b.sz]} />
-      <meshStandardMaterial color={color} roughness={0.92} metalness={0.05} />
-    </mesh>
-  );
-}
-
-function CrosswalkStripes({ ring }: { ring: [number, number][] }) {
-  const b = ringAabb(ring);
-  const stripes: { x: number; z: number; sx: number; sz: number }[] = [];
-  const bar = 0.38;
-  const gap = 0.42;
-  const alongZ = b.sz >= b.sx;
-  if (alongZ) {
-    for (let z = b.minZ + 0.12; z + bar < b.maxZ - 0.08; z += bar + gap) {
-      stripes.push({ x: b.cx, z: z + bar / 2, sx: b.sx - 0.12, sz: bar });
-    }
-  } else {
-    for (let x = b.minX + 0.12; x + bar < b.maxX - 0.08; x += bar + gap) {
-      stripes.push({ x: x + bar / 2, z: b.cz, sx: bar, sz: b.sz - 0.12 });
-    }
-  }
-  return (
-    <group>
-      {stripes.map((s, i) => (
-        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]} position={[s.x, 0.012, s.z]}>
-          <planeGeometry args={[s.sx, s.sz]} />
-          <meshBasicMaterial color="#e8e6dc" />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function Road() {
-  return (
-    <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[39, -0.04, 0]} receiveShadow>
-        <planeGeometry args={[90, 72]} />
-        <meshStandardMaterial color="#1a1a16" roughness={1} />
-      </mesh>
-      {localMap.roads.map((p) => (
-        <PolyPlane key={p.id} ring={p.ring} y={0} color="#2a2a2e" />
-      ))}
-      {localMap.sidewalks.map((p) => (
-        <PolyPlane key={p.id} ring={p.ring} y={0.05} color="#5a5a62" />
-      ))}
-      {localMap.crosswalks.map((p) => (
-        <CrosswalkStripes key={p.id} ring={p.ring} />
-      ))}
-    </group>
-  );
-}
+import { Environment } from "./Environment";
 
 function VehicleMesh({ obj }: { obj: SceneObject }) {
   const [l, w, h] = obj.size;
@@ -354,8 +289,9 @@ function SimLoop() {
 
 function CamRig() {
   const mode = useSim((s) => s.cameraMode);
-  const desired = useRef(new THREE.Vector3(0, 2, 0));
-  const look = useRef(new THREE.Vector3(16, 0.4, 0));
+  const desired = useRef(new THREE.Vector3(-10.5, 3.6, 0));
+  const look = useRef(new THREE.Vector3(16, 1.05, 0));
+  const lastMode = useRef(mode);
 
   useFrame(({ camera }) => {
     const x = useSim.getState().sensorX;
@@ -364,13 +300,19 @@ function CamRig() {
       desired.current.set(x + 0.15, SENSOR_HEIGHT + 0.12, 0);
       look.current.set(x + 22, 0.35, 0);
       persp.fov = 68;
-      camera.position.lerp(desired.current, 0.18);
+    } else if (mode === "bev") {
+      desired.current.set(x + 24, 82, 0.01);
+      look.current.set(x + 24, 0, 0);
+      persp.fov = 58;
     } else {
-      desired.current.set(x - 7.5, 3.8, 0.15);
-      look.current.set(x + 9, 0.9, 0);
+      desired.current.set(x - 10.5, 3.6, 0);
+      look.current.set(x + 16, 1.05, 0);
       persp.fov = 52;
-      camera.position.lerp(desired.current, 0.1);
     }
+    const snap = lastMode.current !== mode || camera.position.distanceTo(desired.current) > 28;
+    lastMode.current = mode;
+    if (snap) camera.position.copy(desired.current);
+    else camera.position.lerp(desired.current, mode === "third" ? 0.18 : 0.12);
     persp.updateProjectionMatrix();
     camera.lookAt(look.current);
   });
@@ -385,12 +327,7 @@ function World() {
 
   return (
     <>
-      <color attach="background" args={["#0c0c10"]} />
-      <fog attach="fog" args={["#0c0c10", 28, 90]} />
-      <hemisphereLight args={["#9aa8b8", "#1a1814", 0.55]} />
-      <directionalLight position={[20, 28, 10]} intensity={1.15} castShadow />
-      <ambientLight intensity={0.22} />
-      <Road />
+      <Environment />
       <BevOverlay />
       {objects.map((obj) => (
         <group key={obj.id}>
@@ -411,7 +348,7 @@ export function HorizonCanvas() {
     <Canvas
       shadows
       dpr={[1, 1.6]}
-      camera={{ position: [0.2, 1.7, 0], fov: 62, near: 0.15, far: 180 }}
+      camera={{ position: [-10.5, 3.6, 0], fov: 52, near: 0.15, far: 280 }}
       gl={{ antialias: true, alpha: false }}
       onPointerMissed={() => useSim.getState().setHoveredId(null)}
     >

@@ -45,11 +45,11 @@ export const DEFAULT_BEV_CONFIG: BevConfig = {
   cellSize: 0.2,
   xMin: 0,
   xMax: ROAD_LENGTH,
-  yMin: -28,
-  yMax: 28,
+  yMin: -50,
+  yMax: 50,
   groundHeight: 0.08,
   minOccupied: 2,
-  sweepLateral: 32,
+  sweepLateral: 50,
 };
 
 export type CellHit = {

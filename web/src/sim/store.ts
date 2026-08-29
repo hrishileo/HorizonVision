@@ -11,10 +11,12 @@ import {
 import {
   DEFAULT_DENSITY,
   DEFAULT_SPEED,
+  END_X,
   type CameraMode,
   type Detection,
   type LogFrame,
   type SceneObject,
+  type WorldKind,
 } from "./types";
 import { buildPointCloud, generateScene } from "./generateScene";
 
@@ -29,6 +31,7 @@ type SimState = {
   density: number;
   irregular: boolean;
   cameraMode: CameraMode;
+  world: WorldKind;
   hoveredId: number | null;
   playing: boolean;
   detections: Detection[];
@@ -44,6 +47,7 @@ type SimState = {
   setDensity: (v: number) => void;
   setIrregular: (v: boolean) => void;
   setCameraMode: (v: CameraMode) => void;
+  setWorld: (v: WorldKind) => void;
   setHoveredId: (id: number | null) => void;
   setVisibleCount: (n: number) => void;
   setBevCellSize: (cellSize: number) => void;
@@ -81,7 +85,8 @@ export const useSim = create<SimState>((set, get) => ({
   speed: DEFAULT_SPEED,
   density: DEFAULT_DENSITY,
   irregular: false,
-  cameraMode: "drone",
+  cameraMode: "third",
+  world: "city",
   hoveredId: null,
   playing: true,
   detections: [],
@@ -145,6 +150,7 @@ export const useSim = create<SimState>((set, get) => ({
     });
   },
   setCameraMode: (cameraMode) => set({ cameraMode }),
+  setWorld: (world) => set({ world }),
   setHoveredId: (hoveredId) => set({ hoveredId }),
   setVisibleCount: (visibleCount) => set({ visibleCount }),
   setBevCellSize: (cellSize) => {
@@ -159,7 +165,7 @@ export const useSim = create<SimState>((set, get) => ({
   tick: (dt) => {
     const s = get();
     if (!s.playing || s.objects.length === 0) return;
-    const sensorX = Math.min(68, s.sensorX + s.speed * dt);
+    const sensorX = Math.min(END_X, s.sensorX + s.speed * dt);
     const time = s.time + dt;
     const { bev, detections } = refreshBev(
       s.cloud,
@@ -185,7 +191,7 @@ export const useSim = create<SimState>((set, get) => ({
           ].slice(-240)
         : s.log;
     // Never force-play: a user pause has to survive this write.
-    const playing = get().playing && sensorX < 67.9;
+    const playing = get().playing && sensorX < END_X - 0.1;
     set({ sensorX, time, detections, bev, log, playing });
   },
 }));

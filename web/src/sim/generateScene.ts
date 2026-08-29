@@ -5,7 +5,7 @@ import {
   type ObjectLabel,
   type SceneObject,
 } from "./types";
-import { pickSidewalkPoint, sampleRoadGround } from "./map/intersection";
+import { inRoundabout, pickSidewalkPoint, sampleRoadGround } from "./map/intersection";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -40,7 +40,6 @@ function sized(rng: () => number, label: ObjectLabel): [number, number, number] 
   ];
 }
 
-/** density 1–10 → vehicles per lane. irregular adds a lane-change car and a pedestrian in the road. */
 export function generateScene(
   seed: number,
   density = 5,
@@ -54,18 +53,17 @@ export function generateScene(
   const startX = 12;
   const endX = ROAD_LENGTH - 8;
   const span = endX - startX;
-
   const vehicleIds: number[] = [];
 
-  for (let lane = 0; lane < 2; lane++) {
+  for (let lane = 0; lane < LANE_Z.length; lane++) {
     const z = LANE_Z[lane]!;
-    const heading = lane === 0 ? Math.PI : 0;
+    const heading = z > 0 ? Math.PI : 0;
     const gap = span / perLane;
     for (let i = 0; i < perLane; i++) {
       const label = pickVehicle(rng);
       const size = sized(rng, label);
       const cx = startX + gap * (i + 0.5) + randRange(rng, -0.45, 0.45);
-      if (cx > 31 && cx < 47) continue;
+      if (inRoundabout(cx, z, 5)) continue;
       const obj: SceneObject = {
         id: id++,
         label,
@@ -79,15 +77,32 @@ export function generateScene(
     }
   }
 
-  const walkers = Math.max(1, Math.round(perLane * 0.4));
+  const LANE_X = [43.6, 47.45, 51.3, 64.7, 68.55, 72.4] as const;
+  for (const x of LANE_X) {
+    const heading = x < 58 ? Math.PI / 2 : -Math.PI / 2;
+    for (const z of [-40, 40]) {
+      if (inRoundabout(x, z, 5)) continue;
+      const label = pickVehicle(rng);
+      objects.push({
+        id: id++,
+        label,
+        center: [x + randRange(rng, -0.12, 0.12), 0, z],
+        size: sized(rng, label),
+        yaw: heading + randRange(rng, -0.02, 0.02),
+        color: OBJECT_SPECS[label].color,
+      });
+    }
+  }
+
+  const walkers = Math.max(2, Math.round(perLane * 0.5));
   for (let i = 0; i < walkers; i++) {
-    const [wx, wz] = i === 0 ? ([11.2, 7.05] as [number, number]) : pickSidewalkPoint(rng);
+    const [x, z] = i === 0 ? ([11.2, 17.3] as [number, number]) : pickSidewalkPoint(rng);
     objects.push({
       id: id++,
       label: "pedestrian",
-      center: [wx, 0, wz],
+      center: [x, 0, z],
       size: sized(rng, "pedestrian"),
-      yaw: wz > 0 ? Math.PI : 0,
+      yaw: z > 0 ? Math.PI : 0,
       color: OBJECT_SPECS.pedestrian.color,
     });
   }
@@ -97,16 +112,15 @@ export function generateScene(
       vehicleIds[Math.floor(rng() * Math.max(1, vehicleIds.length))] ??
       objects.find((o) => o.label !== "pedestrian")?.id;
     const stray = objects.find((o) => o.id === pickId);
-    if (stray) {
+    if (stray && !inRoundabout(stray.center[0], stray.center[2], 6)) {
       const towardCenter = stray.center[2] > 0 ? -1 : 1;
-      const nz = stray.center[2] + towardCenter * randRange(rng, 1.8, 2.6);
-      if (Math.abs(nz) < 6 && !(stray.center[0] > 31 && stray.center[0] < 47)) {
+      const nz = stray.center[2] + towardCenter * randRange(rng, 1.6, 2.4);
+      if (Math.abs(nz) > 4.8 && Math.abs(nz) < 16.3) {
         stray.center = [stray.center[0], 0, nz];
         stray.yaw += towardCenter * randRange(rng, 0.28, 0.42);
         stray.irregular = "lane-departure";
       }
     }
-
   }
 
   return objects;
@@ -114,7 +128,6 @@ export function generateScene(
 
 export type SimCloud = {
   positions: Float32Array;
-  /** 0 = ground / unlabeled. Otherwise the SceneObject.id that spawned the return. */
   objectIds: Int32Array;
 };
 
@@ -122,7 +135,6 @@ export function buildPointCloud(objects: SceneObject[], seed: number): SimCloud 
   const rng = mulberry32(seed + 91);
   const pts: number[] = [];
   const ids: number[] = [];
-
   sampleRoadGround(7200, rng, pts, ids);
 
   for (const obj of objects) {

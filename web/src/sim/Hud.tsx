@@ -34,6 +34,7 @@ export function Hud() {
   const density = useSim((s) => s.density);
   const irregular = useSim((s) => s.irregular);
   const cameraMode = useSim((s) => s.cameraMode);
+  const world = useSim((s) => s.world);
   const detections = useSim((s) => s.detections);
   const visibleCount = useSim((s) => s.visibleCount);
   const log = useSim((s) => s.log);
@@ -46,6 +47,7 @@ export function Hud() {
   const setDensity = useSim((s) => s.setDensity);
   const setIrregular = useSim((s) => s.setIrregular);
   const setCameraMode = useSim((s) => s.setCameraMode);
+  const setWorld = useSim((s) => s.setWorld);
   const setBevCellSize = useSim((s) => s.setBevCellSize);
   const hudDetectionsOpen = useSim((s) => s.hudDetectionsOpen);
   const hudStatsOpen = useSim((s) => s.hudStatsOpen);
@@ -65,16 +67,30 @@ export function Hud() {
           <p className="muted" style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", margin: 0 }}>
             Horizon Vision
           </p>
-          <h1 style={{ margin: "6px 0 4px", fontSize: 18 }}>Live LiDAR + Camera</h1>
+          <h1 style={{ margin: "6px 0 4px", fontSize: 18 }}>Live LiDAR + occupancy</h1>
           <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-            You are the drone. Amber cells are occupied, green are free ground.
+            39 Street roundabout · Dubai Silicon Oasis
           </p>
           <div className="seg" style={{ marginTop: 12 }}>
             <button type="button" className={cameraMode === "drone" ? "on" : ""} onClick={() => setCameraMode("drone")}>
               Drone
             </button>
             <button type="button" className={cameraMode === "third" ? "on" : ""} onClick={() => setCameraMode("third")}>
-              Third person
+              Chase
+            </button>
+            <button type="button" className={cameraMode === "bev" ? "on" : ""} onClick={() => setCameraMode("bev")}>
+              BEV
+            </button>
+          </div>
+          <div className="seg" style={{ marginTop: 8 }}>
+            <button type="button" className={world === "city" ? "on" : ""} onClick={() => setWorld("city")}>
+              City
+            </button>
+            <button type="button" className={world === "forest" ? "on" : ""} onClick={() => setWorld("forest")}>
+              Woods
+            </button>
+            <button type="button" className={world === "open" ? "on" : ""} onClick={() => setWorld("open")}>
+              Open
             </button>
           </div>
           <div className="seg" style={{ marginTop: 8 }}>
