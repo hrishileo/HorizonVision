@@ -12,7 +12,6 @@
 
 import {
   ROAD_LENGTH,
-  ROAD_WIDTH,
   SENSOR_MIN,
   SENSOR_RANGE,
   type Detection,
@@ -46,11 +45,11 @@ export const DEFAULT_BEV_CONFIG: BevConfig = {
   cellSize: 0.2,
   xMin: 0,
   xMax: ROAD_LENGTH,
-  yMin: -ROAD_WIDTH / 2,
-  yMax: ROAD_WIDTH / 2,
+  yMin: -28,
+  yMax: 28,
   groundHeight: 0.08,
   minOccupied: 2,
-  sweepLateral: 9,
+  sweepLateral: 32,
 };
 
 export type CellHit = {

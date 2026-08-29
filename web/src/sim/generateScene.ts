@@ -2,10 +2,10 @@ import {
   LANE_Z,
   OBJECT_SPECS,
   ROAD_LENGTH,
-  ROAD_WIDTH,
   type ObjectLabel,
   type SceneObject,
 } from "./types";
+import { pickSidewalkPoint, sampleRoadGround } from "./map/intersection";
 
 function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -65,6 +65,7 @@ export function generateScene(
       const label = pickVehicle(rng);
       const size = sized(rng, label);
       const cx = startX + gap * (i + 0.5) + randRange(rng, -0.45, 0.45);
+      if (cx > 31 && cx < 47) continue;
       const obj: SceneObject = {
         id: id++,
         label,
@@ -80,17 +81,13 @@ export function generateScene(
 
   const walkers = Math.max(1, Math.round(perLane * 0.4));
   for (let i = 0; i < walkers; i++) {
-    const side = rng() < 0.5 ? -1 : 1;
+    const [wx, wz] = i === 0 ? ([11.2, 7.05] as [number, number]) : pickSidewalkPoint(rng);
     objects.push({
       id: id++,
       label: "pedestrian",
-      center: [
-        randRange(rng, 14, ROAD_LENGTH - 10),
-        0,
-        side * (ROAD_WIDTH / 2 + 0.7),
-      ],
+      center: [wx, 0, wz],
       size: sized(rng, "pedestrian"),
-      yaw: randRange(rng, -0.2, 0.2),
+      yaw: wz > 0 ? Math.PI : 0,
       color: OBJECT_SPECS.pedestrian.color,
     });
   }
@@ -102,24 +99,14 @@ export function generateScene(
     const stray = objects.find((o) => o.id === pickId);
     if (stray) {
       const towardCenter = stray.center[2] > 0 ? -1 : 1;
-      stray.center = [
-        stray.center[0],
-        0,
-        stray.center[2] + towardCenter * randRange(rng, 1.8, 2.6),
-      ];
-      stray.yaw += towardCenter * randRange(rng, 0.28, 0.42);
-      stray.irregular = "lane-departure";
+      const nz = stray.center[2] + towardCenter * randRange(rng, 1.8, 2.6);
+      if (Math.abs(nz) < 6 && !(stray.center[0] > 31 && stray.center[0] < 47)) {
+        stray.center = [stray.center[0], 0, nz];
+        stray.yaw += towardCenter * randRange(rng, 0.28, 0.42);
+        stray.irregular = "lane-departure";
+      }
     }
 
-    objects.push({
-      id: id++,
-      label: "pedestrian",
-      center: [randRange(rng, 22, 42), 0, randRange(rng, -1.1, 1.1)],
-      size: sized(rng, "pedestrian"),
-      yaw: randRange(rng, -0.4, 0.4),
-      color: OBJECT_SPECS.pedestrian.color,
-      irregular: "pedestrian-in-road",
-    });
   }
 
   return objects;
@@ -136,12 +123,7 @@ export function buildPointCloud(objects: SceneObject[], seed: number): SimCloud 
   const pts: number[] = [];
   const ids: number[] = [];
 
-  for (let i = 0; i < 5200; i++) {
-    const x = randRange(rng, 2, ROAD_LENGTH);
-    const z = randRange(rng, -ROAD_WIDTH / 2, ROAD_WIDTH / 2);
-    pts.push(x, rng() * 0.05, z);
-    ids.push(0);
-  }
+  sampleRoadGround(7200, rng, pts, ids);
 
   for (const obj of objects) {
     const [l, w, h] = obj.size;
