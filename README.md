@@ -10,11 +10,19 @@ This repo has two layers that share the same product model (sensor + objects + d
 2. **Live 3D web viewer** (`web/`) — interactive drone/third-person sim, traffic density, uniform/irregular scenes, hover labels, and JSON data collection.
 
 ## Current Focus
-- Sensor ingestion (3D LiDAR + Camera)
-- Edge AI perception pipeline
-- Live 3D visualization + detection logging
-- Local mapping foundation
-- Clean architecture ready for ROS 2 / Jetson deployment
+- Camera-only edge events for a Jetson Orin Nano (monocular; LiDAR is not on this path)
+- Label → tracked event pipeline and a ground-plane accuracy check
+- Live 3D visualization in `web/` (lab viewer)
+- LiDAR drivers, fusion, and mapping remain in the tree and are not part of the edge-event path
+
+## Camera-only edge events
+```bash
+pip install -r requirements-dev.txt
+PYTHONPATH=src python -m pytest
+PYTHONPATH=src python -m horizon_vision.events.report \
+  --fixture tests/fixtures/mag_mile_labels.jsonl
+```
+Contract and recorder alignment: `docs/edge-events.md`.
 
 ## Project Structure
 ```
@@ -44,9 +52,8 @@ npm run dev
 ```
 
 ## Hardware Target
-- Drone + 3D LiDAR (Livox / Velodyne / Ouster style)
-- RGB / RGB-D Camera
-- NVIDIA Jetson Orin / Xavier (or equivalent edge GPU)
+- Drone + RGB camera on an NVIDIA Jetson Orin Nano (camera-only edge events)
+- LiDAR interfaces remain under `src/horizon_vision/sensors/` and are not used by that path
 
 ## Roadmap
 1. ✅ Sensor interfaces + edge pipeline skeleton

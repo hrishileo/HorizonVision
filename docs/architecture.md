@@ -22,7 +22,7 @@ Drone
                      Phone app / car display / partner GPS feeds
 ```
 
-Lab path today: `web/` simulates the drone view and logs detections as JSON.
+Lab path today: Vision-Quest Mag Mile labels (ground truth) feed the camera-only edge contract in `docs/edge-events.md`. The `web/` viewer and the LiDAR modules are unchanged and are not on that path.
 Flight path later: see `docs/phone-gps-live.md`.
 
 ## Current Status (v0.2)
