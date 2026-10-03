@@ -24,6 +24,15 @@ PYTHONPATH=src python -m horizon_vision.events.report \
 ```
 Contract and recorder alignment: `docs/edge-events.md`.
 
+## Hub detour (Mag Mile)
+The hub turns lane-state updates into driver reroute alerts. The street graph is a few approximate blocks of Michigan Avenue plus Rush, Wabash, and the Ohio–Chicago cross streets (`horizon_vision.hub`). A mock phone sink writes alerts as local JSONL.
+
+```bash
+PYTHONPATH=src python -m horizon_vision.hub \
+  --output /tmp/debris_alerts.jsonl \
+  --summary /tmp/debris_summary.txt
+```
+
 ## Project Structure
 ```
 HorizonVision/
@@ -31,6 +40,7 @@ HorizonVision/
 │   ├── sensors/          # LiDAR & Camera drivers / interfaces
 │   ├── perception/       # Fusion + Edge AI
 │   ├── mapping/          # Local map building
+│   ├── hub/              # Detour graph, A* reroute, JSONL alerts
 │   └── main.py           # Entry point for edge computer
 ├── web/                  # Live 3D viewer (this iteration)
 ├── config/               # Sensor & pipeline configuration
