@@ -25,7 +25,7 @@ PYTHONPATH=src python -m horizon_vision.events.report \
 Contract and recorder alignment: `docs/edge-events.md`.
 
 ## Hub detour (Mag Mile)
-The hub turns lane-state updates into driver reroute alerts. The street graph is a few approximate blocks of Michigan Avenue plus Rush, Wabash, and the Ohio–Chicago cross streets (`horizon_vision.hub`). A mock phone sink writes alerts as local JSONL.
+The hub turns lane-state updates into driver reroute alerts. The street graph is a few approximate blocks of Michigan Avenue plus Rush, Wabash, and the Ohio–Chicago cross streets (`horizon_vision.hub`). Michigan lane ids are the Vision-Quest scene ids from `src/lib/guide/city.ts`: `mich-nb-0`, `mich-nb-1`, `mich-nb-2`, `mich-sb-0`, `mich-sb-1`, `mich-sb-2` (inner lane is 0). Chicago Avenue crossings use `chi-eb-0` and `chi-wb-0`. A mock phone sink writes alerts as local JSONL.
 
 ```bash
 PYTHONPATH=src python -m horizon_vision.hub \

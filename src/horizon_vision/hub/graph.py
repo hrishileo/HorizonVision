@@ -21,9 +21,16 @@ Ontario and Huron are westbound. The graph links both directions at every
 junction so a driver can leave Michigan onto either parallel street.
 
 Each edge stores a length and a speed limit. The base cost is travel time,
-``length / speed_limit``. Lane offsets assume 3.5 m lanes: two northbound
-lanes east of the centerline (``mich-nb-1`` inner, ``mich-nb-2`` curb) and
-two southbound lanes west of it.
+``length / speed_limit``.
+
+Michigan and Chicago Avenue lane ids and center offsets are copied from
+Vision-Quest ``src/lib/guide/city.ts`` (``main``, and the same list on
+recorder branch ``cursor/cam0-corpus-d178``). Michigan is six lanes, inner
+index 0: ``mich-nb-0..2`` at x = 2.0, 5.5, 9.0 and ``mich-sb-0..2`` at
+x = −2.0, −5.5, −9.0. Chicago Avenue in that scene is ``chi-eb-0``,
+``chi-eb-1``, ``chi-wb-0``, ``chi-wb-1``. This graph's Chicago crossing is
+one link each way, tagged ``chi-eb-0`` and ``chi-wb-0``. Rush, Wabash, and
+the other cross streets are not lanes in that scene; their ids are hub-local.
 """
 
 from __future__ import annotations
@@ -41,7 +48,20 @@ MPH_TO_MPS = METRES_PER_MILE / 3600.0
 
 MICHIGAN_SPEED_MPS = 30 * MPH_TO_MPS
 SIDE_STREET_SPEED_MPS = 25 * MPH_TO_MPS
-LANE_WIDTH_M = 3.5
+
+# Lane centers from Vision-Quest city.ts. Inner lane is index 0. +x is east.
+MICH_NB_X = (2.0, 5.5, 9.0)
+MICH_SB_X = (-2.0, -5.5, -9.0)
+MICHIGAN_LANE_IDS = (
+    "mich-nb-0",
+    "mich-nb-1",
+    "mich-nb-2",
+    "mich-sb-0",
+    "mich-sb-1",
+    "mich-sb-2",
+)
+# Scene also has chi-eb-1 and chi-wb-1. The crossing below uses the inner pair.
+CHICAGO_LANE_IDS = ("chi-eb-0", "chi-eb-1", "chi-wb-0", "chi-wb-1")
 
 # North-address numbers. y is metres south of Chicago Avenue (800 N).
 CROSS_STREETS: tuple[tuple[str, int], ...] = (
@@ -175,14 +195,17 @@ def mag_mile_graph() -> StreetGraph:
     graph = StreetGraph()
     y_by_cross = {name: cross_y(number) for name, number in CROSS_STREETS}
 
-    # key, x, northbound lane id, southbound lane id, speed
+    # key, x, northbound lane id, southbound lane id, speed.
+    # Michigan keys are the scene's 0-based lane index.
     corridors: tuple[tuple[str, float, str | None, str | None, float], ...] = (
         ("wabash", X_WABASH, "wabash-nb", "wabash-sb", SIDE_STREET_SPEED_MPS),
         ("rush", X_RUSH, "rush-nb", "rush-sb", SIDE_STREET_SPEED_MPS),
-        ("sb2", -2.5 * LANE_WIDTH_M, None, "mich-sb-2", MICHIGAN_SPEED_MPS),
-        ("sb1", -0.5 * LANE_WIDTH_M, None, "mich-sb-1", MICHIGAN_SPEED_MPS),
-        ("nb1", 0.5 * LANE_WIDTH_M, "mich-nb-1", None, MICHIGAN_SPEED_MPS),
-        ("nb2", 1.5 * LANE_WIDTH_M, "mich-nb-2", None, MICHIGAN_SPEED_MPS),
+        ("sb2", MICH_SB_X[2], None, "mich-sb-2", MICHIGAN_SPEED_MPS),
+        ("sb1", MICH_SB_X[1], None, "mich-sb-1", MICHIGAN_SPEED_MPS),
+        ("sb0", MICH_SB_X[0], None, "mich-sb-0", MICHIGAN_SPEED_MPS),
+        ("nb0", MICH_NB_X[0], "mich-nb-0", None, MICHIGAN_SPEED_MPS),
+        ("nb1", MICH_NB_X[1], "mich-nb-1", None, MICHIGAN_SPEED_MPS),
+        ("nb2", MICH_NB_X[2], "mich-nb-2", None, MICHIGAN_SPEED_MPS),
     )
 
     for place, x, _nb, _sb, _speed in corridors:
@@ -211,22 +234,34 @@ def mag_mile_graph() -> StreetGraph:
     west_to_east = [place for place, *_rest in corridors]
     for cross in SOUTH_TO_NORTH:
         for left, right in zip(west_to_east, west_to_east[1:]):
-            lane = f"{cross}-ew"
+            east_lane = _crossing_lane(cross, eastbound=True)
+            west_lane = _crossing_lane(cross, eastbound=False)
             graph.add_edge(
-                f"{lane}@{left}--{right}",
+                f"{east_lane}@{left}--{right}",
                 _node(left, cross),
                 _node(right, cross),
                 SIDE_STREET_SPEED_MPS,
-                lane,
+                east_lane,
             )
             graph.add_edge(
-                f"{lane}@{right}--{left}",
+                f"{west_lane}@{right}--{left}",
                 _node(right, cross),
                 _node(left, cross),
                 SIDE_STREET_SPEED_MPS,
-                lane,
+                west_lane,
             )
     return graph
+
+
+def _crossing_lane(cross: str, eastbound: bool) -> str:
+    """Lane id for a cross-street link.
+
+    Chicago Avenue uses the Vision-Quest inner lanes. Other cross streets
+    are not in that scene, so they keep a hub-local id.
+    """
+    if cross == "chicago":
+        return "chi-eb-0" if eastbound else "chi-wb-0"
+    return f"{cross}-ew"
 
 
 def lane_route(lane: str, start: str, end: str) -> tuple[str, ...]:

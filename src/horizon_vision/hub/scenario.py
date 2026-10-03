@@ -19,22 +19,16 @@ NOW_S = 1000.0
 
 
 def debris_lane_states(now: float = NOW_S) -> list[LaneState]:
-    """Both northbound Michigan lanes blocked. Payloads go through the adapter."""
-    payloads = (
+    """All three Vision-Quest northbound lanes blocked. Payloads use the adapter."""
+    payloads = tuple(
         {
-            "lane": "mich-nb-1",
+            "lane": lane,
             "state": "blocked",
             "speed": None,
             "confidence": 0.95,
             "t": now,
-        },
-        {
-            "lane": "mich-nb-2",
-            "state": "blocked",
-            "speed": None,
-            "confidence": 0.95,
-            "t": now,
-        },
+        }
+        for lane in ("mich-nb-0", "mich-nb-1", "mich-nb-2")
     )
     return [lane_state_from_mapping(payload) for payload in payloads]
 
@@ -49,17 +43,28 @@ def debris_drivers(graph: StreetGraph) -> list[Driver]:
     """Northbound drivers first so each anti-herding batch is all northbound."""
     south, north = SOUTH_TO_NORTH[0], SOUTH_TO_NORTH[-1]
     drivers = [
-        _driver(graph, f"nb-{index:02d}", "mich-nb-1", south, north) for index in range(1, 9)
+        _driver(graph, f"nb-{index:02d}", "mich-nb-0", south, north) for index in range(1, 9)
     ]
     drivers.extend(
-        _driver(graph, f"sb-{index:02d}", "mich-sb-1", north, south) for index in range(1, 3)
+        _driver(graph, f"sb-{index:02d}", "mich-sb-0", north, south) for index in range(1, 3)
     )
     return drivers
 
 
 def corridor_of(route: tuple[str, ...] | list[str]) -> str:
     """Which longitudinal corridor a route actually travels."""
-    for name in ("wabash-nb", "rush-nb", "wabash-sb", "rush-sb", "mich-nb-1", "mich-nb-2", "mich-sb-1"):
+    for name in (
+        "wabash-nb",
+        "rush-nb",
+        "wabash-sb",
+        "rush-sb",
+        "mich-nb-0",
+        "mich-nb-1",
+        "mich-nb-2",
+        "mich-sb-0",
+        "mich-sb-1",
+        "mich-sb-2",
+    ):
         if any(edge_id.startswith(f"{name}@") for edge_id in route):
             return name
     return "other"
@@ -102,7 +107,7 @@ def format_summary(
         "Axes: x east metres, y south metres (same plane as edge events).",
         "Ohio 600 N, Ontario 628 N, Erie 658 N, Huron 700 N, Chicago Ave 800 N;",
         "Wabash 44 E, Rush 65 E, Michigan 100 E. Both parallel streets are west of Michigan.",
-        "Blocked lanes: mich-nb-1, mich-nb-2 (fresh, confidence 0.95).",
+        "Blocked lanes: mich-nb-0, mich-nb-1, mich-nb-2 (Vision-Quest ids, inner is 0).",
         (
             f"t={now:.1f}s  min_savings_s={config.min_savings_s:.0f}  "
             f"herd_factor={config.herd_factor}  batch_size={config.batch_size}"
