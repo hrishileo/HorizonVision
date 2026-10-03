@@ -47,6 +47,58 @@ so event `y` is world `Z`.
 The JSON Schema object lives at `EDGE_EVENT_JSON_SCHEMA` in
 `horizon_vision.events.schema`.
 
+## Lane state
+
+The hub in `horizon_vision.hub` costs lanes from this event, not from the
+per-track events above. `state` is the travel decision. `speed` is the mean
+of the confident tracks in the lane, in m/s, and is null exactly when
+`state` is `unknown`.
+
+```json
+{"lane": "chi-wb-0", "state": "blocked", "speed": 0.068, "confidence": 0.393, "t": 3.867}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `lane` | Lane id. Never null. A lane that has not been seen is omitted, and omission is not `clear`. |
+| `state` | `blocked`, `slow`, `clear`, or `unknown` |
+| `speed` | Mean speed (m/s) of the confident tracks in the lane. Null exactly when `state` is `unknown`. |
+| `confidence` | 0–1. Mean of the tracks that supported the decision, or 0 when the lane has gone stale. |
+| `t` | Seconds, the frame time the state was evaluated. |
+
+JSON Schema: `LANE_STATE_JSON_SCHEMA` in `horizon_vision.events.lane_state`.
+The hub reads the same five fields in `lane_state_from_mapping`.
+
+How `horizon_vision.hub.graph.travel_time_s` costs the lane:
+
+| `state` | Travel |
+| --- | --- |
+| `blocked` | Impassable, when the reading is trusted. Do not divide by `speed`. |
+| `slow` | `length / speed`, capped at the edge speed limit. A null or zero speed is impassable. |
+| `clear` | Free-flow time (`length / speed limit`). The published `speed` is not the cost. |
+| `unknown` | Cautious. Free-flow times `cautious_factor` (default 2). Worse than clear, never the free-flow cost. `speed` is null and is not used. |
+
+The hub also treats a reading as untrusted when its confidence is below the
+hub floor (default 0.5) or its `t` is older than `max_age_s`. Untrusted
+readings use the same cautious cost as `unknown`, even if the payload says
+`clear` or `blocked`. The edge applies its own, lower floor before it will
+emit `clear`, `slow`, or `blocked`.
+
+The edge decision, first match:
+
+1. No observation of the lane within `stale_s`, or every current track is below `min_confidence` → `unknown`. This is never `clear`.
+2. A `vehicle` or `unknown` track has stayed in this same lane, at or under `stationary_mps`, and within `stationary_radius_m` of where that dwell began, for at least `hold_s` → `blocked`.
+3. Mean speed is below `slow_mps` → `slow`.
+4. Otherwise → `clear`.
+
+A sample below `min_confidence` does not start or extend a dwell, so a short low-confidence blip cannot block a lane and cannot clear it. Changing lane, leaving the anchor radius, or a gap longer than `max_gap_s` starts the dwell over. `hold_s` is positive, so one sample is never enough.
+
+Until the dwell finishes, a stopped track still counts in the mean. A lane whose only confident track is stopped is `slow`, then `blocked` once the hold elapses. Other confident tracks in the same lane keep the mean up; `blocked` still wins when any one of them finishes a dwell.
+
+Defaults: hold 1.5 s, stationary ≤ 0.5 m/s, radius 4 m, slow below 4.0 m/s, stale 1.0 s, minimum confidence 0.2, maximum gap inside a dwell 0.5 s. The confidence floor is 0.2 because stopped cars in the CAM0 sample stay under 0.1 m/s while the ray confidence climbs through that value. Rays shallower than 0.2 stay `unknown`.
+
+Within the stale window, a lane with no new track keeps the last state so a one-frame miss does not flicker. After the window it becomes `unknown` with confidence 0.
+
 ## Label file
 
 The parser in `horizon_vision.events.labels` reads the CAM0 JSONL from
@@ -112,6 +164,8 @@ still parse.
    timestamp emits nothing.
 5. Drop a track after `max_misses` consecutive frames without that id
    (default 5). It must reach `min_hits` again before it emits.
+6. Fold those tracks into one lane-state event per seen lane at each frame
+   time. Empty frames still advance the clock so a lane can go stale.
 
 Published `x`/`y` are the smoothed estimates. The accuracy script scores
 the raw ground-plane position, the smoothed position on the emitted event,
@@ -131,13 +185,27 @@ pip install -r requirements-dev.txt
 PYTHONPATH=src python -m pytest
 PYTHONPATH=src python -m horizon_vision.events.report \
   --fixture tests/fixtures/cam0-sample.labels.jsonl
+PYTHONPATH=src python -m horizon_vision.events.lane_report \
+  --fixture tests/fixtures/cam0-sample.labels.jsonl
 ```
 
 `tests/fixtures/cam0-sample.labels.jsonl` is the CAM0 label sample from
-Vision-Quest (no images). `tests/fixtures/mag_mile_labels.jsonl` is a short
-synthetic clip whose boxes are the same pinhole applied to known ground
-points, used to check round-trip error. Closed-form geometry is in
-`tests/test_monocular.py`.
+Vision-Quest (no images). Debris in that capture is off every travel lane
+(`laneId` null), so it does not block a lane. Stopped vehicles do: `chi-wb-0`
+and `chi-wb-1` finish a dwell and stay `blocked`, and `chi-eb-0` is `blocked`
+until the tracked speed climbs. Shallow rays (`mich-nb-0`) stay `unknown`.
+The committed lane-state output is `tests/fixtures/cam0_lane_states.jsonl`.
+
+`tests/fixtures/mag_mile_labels.jsonl` is a short synthetic clip whose boxes
+are the same pinhole applied to known ground points, used to check round-trip
+error. Closed-form geometry is in `tests/test_monocular.py`.
+
+`tests/fixtures/synthetic_blockade_labels.jsonl` is not a capture. The first
+line says so. It uses the recorder's keys. A barrier (`unknown`, kind
+`blockade`) is held in `mich-nb-2`, a car cruises `mich-nb-1`, and another
+crawls `mich-sb-1`. Boxes are the ground-contact projection, so the tracks
+match the truth and the run emits `blocked`, `clear`, and `slow`
+(`tests/fixtures/synthetic_blockade_lane_states.jsonl`).
 
 ## Tailgating
 
