@@ -93,3 +93,53 @@ def _fmt(value: float) -> str:
     if abs(value) < 1e-4:
         return f"{value:.2e}"
     return f"{value:.4f}"
+
+
+def accuracy_table(result: PipelineResult) -> str:
+    """Markdown table of position and speed error on recorder-style subsets."""
+    groups: list[tuple[str, list[ScoredSample]]] = [("all", list(result.samples))]
+    for name in ("vehicle", "unknown"):
+        groups.append((name, [sample for sample in result.samples if sample.cls == name]))
+    bins = (("0–20 m", 0.0, 20.0), ("20–40 m", 20.0, 40.0), ("40 m and beyond", 40.0, math.inf))
+    for label, low, high in bins:
+        groups.append(
+            (
+                label,
+                [sample for sample in result.samples if low <= sample.range_m < high],
+            )
+        )
+    lines = [
+        "| subset | position n | position mean m | position p95 m | speed n | speed mean m/s | speed p95 m/s |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for name, samples in groups:
+        position = _stats([_position_error(sample) for sample in samples])
+        speed = _stats(
+            [
+                abs(sample.est_speed - sample.truth_speed)
+                for sample in samples
+                if sample.est_speed is not None and sample.truth_speed is not None
+            ]
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    name,
+                    str(position.n),
+                    _cell(position.mean, position.n),
+                    _cell(position.p95, position.n),
+                    str(speed.n),
+                    _cell(speed.mean, speed.n),
+                    _cell(speed.p95, speed.n),
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(lines)
+
+
+def _cell(value: float, n: int) -> str:
+    if n == 0:
+        return "n/a"
+    return _fmt(value)

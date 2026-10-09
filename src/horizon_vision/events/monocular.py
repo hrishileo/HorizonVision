@@ -1,18 +1,33 @@
 """Monocular ground-plane position from a pixel box and camera pose.
 
 The box's ground-contact pixel (bottom center) is cast as a ray and
-intersected with the plane ``agl`` metres below the camera. Speed is not
-computed here; the tracker derives it from successive positions.
+intersected with the ground plane. Speed is not computed here; the tracker
+derives it from successive positions.
 
-Camera model (OpenCV axes in a Mag Mile world):
+This is the CAM0 camera from the Vision-Quest recorder:
 
-- World ``+X`` east, ``+Y`` up, ``+Z`` south. Ground is flat.
-- Yaw ``0`` looks south. Positive yaw turns toward east (about ``+Y``).
-- Pitch ``0`` is level. Positive pitch is nose up. ``-pi/2`` looks straight down.
-- Roll positive is right-wing down.
-- Image ``+u`` is camera right, ``+v`` is camera down, optical axis is ``+Z``.
+- World ``+X`` east, ``+Y`` up, ``+Z`` south. The ground plane is ``y = 0``.
+- ``yaw``, ``pitch``, ``roll`` are a Three.js Euler in order YXZ, with
+  components ``(pitch, yaw, roll)``.
+- The camera looks down local ``-Z``. Camera ``+X`` is image right. Camera
+  ``+Y`` is image up.
+- At yaw = pitch = roll = 0 the optical axis points north (world ``-Z``),
+  camera right is east, and camera up is world up.
+- Positive yaw turns the look direction from north toward west. Positive
+  pitch looks up. Negative pitch looks down at the road.
 
-Event ``x, y`` are east and south of that intersection (world ``X`` and ``Z``).
+A pixel ``(u, v)`` (top-left origin, ``+v`` down) becomes::
+
+    X = (u - cx) / fx
+    Y = (cy - v) / fy
+    dir_camera = (X, Y, -1)
+
+``dir_world`` is that vector rotated by the YXZ matrix. The ground hit is
+``position + t * dir_world`` with ``t = (ground_y - position.y) / dir_world.y``
+when the ray descends. On the recorder, ``agl == position.y`` and the ground
+is ``y = 0``.
+
+Event ``x, y`` are east and south of that hit (world ``X`` and ``Z``).
 """
 
 from __future__ import annotations
@@ -35,16 +50,29 @@ class GroundEstimate:
 
 
 def world_from_camera(yaw: float, pitch: float, roll: float) -> np.ndarray:
-    """Columns are the camera +X, +Y, +Z axes expressed in the world frame."""
-    forward_h = np.array([math.sin(yaw), 0.0, math.cos(yaw)], dtype=float)
-    up = np.array([0.0, 1.0, 0.0], dtype=float)
-    right = np.cross(forward_h, up)
-    forward = math.cos(pitch) * forward_h + math.sin(pitch) * up
-    down = np.cross(forward, right)
-    cr, sr = math.cos(roll), math.sin(roll)
-    right_r = cr * right + sr * down
-    down_r = -sr * right + cr * down
-    return np.column_stack((right_r, down_r, forward))
+    """Three.js ``Matrix4.makeRotationFromEuler`` for order YXZ.
+
+    Columns are the camera +X, +Y, and +Z axes in world coordinates.
+    ``pitch`` is Euler x, ``yaw`` is Euler y, ``roll`` is Euler z.
+    """
+    a = math.cos(pitch)
+    b = math.sin(pitch)
+    c = math.cos(yaw)
+    d = math.sin(yaw)
+    e = math.cos(roll)
+    f = math.sin(roll)
+    ce = c * e
+    cf = c * f
+    de = d * e
+    df = d * f
+    return np.array(
+        [
+            [ce + df * b, de * b - cf, a * d],
+            [a * f, a * e, -b],
+            [cf * b - de, df + ce * b, a * c],
+        ],
+        dtype=float,
+    )
 
 
 def estimate_ground_point(
@@ -54,22 +82,24 @@ def estimate_ground_point(
 ) -> GroundEstimate | None:
     """Intersect the box's ground-contact ray with the plane under the camera.
 
-    Returns ``None`` when the ray misses the ground in front of the camera
-    (level or upward look, or the camera is not above the plane).
+    Returns ``None`` when the ray does not descend into the ground in front
+    of the camera.
     """
-    if pose.agl <= 0 or intrinsics.focal_length_px <= 0:
+    fx = intrinsics.focal_x
+    fy = intrinsics.focal_y
+    if pose.agl <= 0 or fx <= 0 or fy <= 0:
         return None
     u, v = bbox.ground_contact
     direction_cam = np.array(
         [
-            (u - intrinsics.cx) / intrinsics.focal_length_px,
-            (v - intrinsics.cy) / intrinsics.focal_length_px,
-            1.0,
+            (u - intrinsics.cx) / fx,
+            (intrinsics.cy - v) / fy,
+            -1.0,
         ],
         dtype=float,
     )
     direction = world_from_camera(pose.yaw, pose.pitch, pose.roll) @ direction_cam
-    if abs(direction[1]) < _RAY_EPS:
+    if direction[1] >= -_RAY_EPS:
         return None
     ground_y = pose.y - pose.agl
     scale = (ground_y - pose.y) / direction[1]

@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from horizon_vision.events.accuracy import accuracy_report
+from horizon_vision.events.accuracy import accuracy_report, accuracy_table
 from horizon_vision.events.labels import read_jsonl
 from horizon_vision.events.pipeline import run_label_pipeline
 from horizon_vision.events.tracking import TrackBook
@@ -22,7 +22,8 @@ def build_report(fixture: str | Path, min_hits: int, max_misses: int, alpha: flo
         frames,
         TrackBook(min_hits=min_hits, max_misses=max_misses, alpha=alpha),
     )
-    return accuracy_report(result).text()
+    report = accuracy_report(result)
+    return report.text() + "\n\n" + accuracy_table(result)
 
 
 def main(argv: list[str] | None = None) -> int:

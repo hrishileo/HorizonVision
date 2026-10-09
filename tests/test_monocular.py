@@ -36,9 +36,9 @@ def _box(u_contact: float, v_contact: float) -> BBox:
 
 
 def test_nadir_pixel_offsets_match_metres_east_and_south():
-    # Facing north (yaw=pi) and looking straight down. Image right is east,
-    # image down is south. 0.1 rad of focal length at 10 m altitude is 1 m.
-    pose = CameraPose(x=0.0, y=10.0, z=0.0, agl=10.0, yaw=math.pi, pitch=-math.pi / 2, roll=0.0)
+    # Yaw 0, looking straight down. Image right is east and image down is
+    # south. 0.1 focal-lengths at 10 m altitude is 1 m.
+    pose = CameraPose(x=0.0, y=10.0, z=0.0, agl=10.0, yaw=0.0, pitch=-math.pi / 2, roll=0.0)
 
     center = estimate_ground_point(_box(320.0, 240.0), pose, INTR)
     assert center is not None
@@ -55,15 +55,14 @@ def test_nadir_pixel_offsets_match_metres_east_and_south():
     assert (south.x, south.y) == pytest.approx((0.0, 1.0))
 
 
-def test_level_camera_facing_south_places_image_right_to_the_west():
-    # Camera 5 m up, level, yaw 0 (facing south). A ground point 20 m south
-    # is 5/20 = 0.25 focal-lengths below the principal point.
-    # A further 0.1 focal-lengths of image-right is 2 m west, because the
-    # drone's right side faces west when it looks south.
+def test_level_camera_at_yaw_zero_looks_north_and_image_right_is_east():
+    # Camera 5 m up, level, yaw 0. The optical axis points north, so a ground
+    # point 20 m north is 5/20 = 0.25 focal-lengths below the principal point.
+    # A further 0.1 focal-lengths of image-right is 2 m east.
     pose = CameraPose(x=0.0, y=5.0, z=0.0, agl=5.0, yaw=0.0, pitch=0.0, roll=0.0)
     estimate = estimate_ground_point(_box(330.0, 265.0), pose, INTR)
     assert estimate is not None
-    assert (estimate.x, estimate.y) == pytest.approx((-2.0, 20.0))
+    assert (estimate.x, estimate.y) == pytest.approx((2.0, -20.0))
 
 
 def test_rays_that_miss_the_ground_return_none():
@@ -88,7 +87,7 @@ def test_events_follow_the_ground_plane_not_the_label_truth():
                     "y": 10.0,
                     "z": 0.0,
                     "agl": 10.0,
-                    "yaw": math.pi,
+                    "yaw": 0.0,
                     "pitch": -math.pi / 2,
                     "roll": 0.0,
                 },
@@ -183,6 +182,92 @@ def test_error_stats_mean_and_p95():
     assert report.speed_mps.n == 3
     assert report.speed_mps.mean == pytest.approx(1.0)
     assert report.speed_mps.p95 == pytest.approx(2.7)
+
+
+def test_recorder_bbox_and_lane_ids():
+    frame = parse_frame(
+        {
+            "schema": 1,
+            "groundTruth": True,
+            "t": 0.1,
+            "file": "images/000000.png",
+            "camera": {
+                "position": {"x": 1.0, "y": 8.0, "z": 2.0},
+                "agl": 8.0,
+                "yaw": 0.0,
+                "pitch": -0.4,
+                "roll": 0.0,
+                "intrinsics": {
+                    "fovY": 70,
+                    "width": 960,
+                    "height": 540,
+                    "fx": 400.0,
+                    "fy": 380.0,
+                    "cx": 480,
+                    "cy": 270,
+                },
+            },
+            "objects": [
+                {
+                    "trackId": "veh-3",
+                    "class": "vehicle",
+                    "type": "vehicle",
+                    "kind": None,
+                    "laneId": "rush-nb-0",
+                    "position": {"x": 60.8, "y": 0, "z": -10},
+                    "speed": 4.5,
+                    "bbox": {"x": 10, "y": 20, "w": 30, "h": 40},
+                },
+                {
+                    "trackId": "deb-2",
+                    "class": "unknown",
+                    "type": "barrier",
+                    "kind": "blockade",
+                    "laneId": "mich-nb-0",
+                    "position": {"x": 2.0, "y": 0, "z": 12.0},
+                    "speed": None,
+                    "bbox": {"x": 100, "y": 200, "w": 12, "h": 8},
+                },
+                {
+                    "trackId": "veh-9",
+                    "class": "vehicle",
+                    "type": "vehicle",
+                    "kind": None,
+                    "laneId": "chi-eb-0",
+                    "position": {"x": 4, "y": 0, "z": 2.4},
+                    "speed": 0,
+                    "bbox": {"x": 1, "y": 2, "w": 3, "h": 4},
+                },
+            ],
+        }
+    )
+    assert frame.pose.y == pytest.approx(8.0)
+    assert frame.pose.agl == pytest.approx(frame.pose.y)
+    assert frame.intrinsics.focal_x == pytest.approx(400.0)
+    assert frame.intrinsics.focal_y == pytest.approx(380.0)
+    by_id = {obj.track_id: obj for obj in frame.objects}
+    assert by_id["veh-3"].lane == "rush-nb-0"
+    assert by_id["veh-3"].truth_y_up == pytest.approx(0.0)
+    assert by_id["deb-2"].lane == "mich-nb-0"
+    assert by_id["deb-2"].unknown is True
+    assert by_id["deb-2"].kind == "blockade"
+    assert by_id["veh-9"].lane == "chi-eb-0"
+    # bottom-center of {x:10, y:20, w:30, h:40} is (25, 60)
+    assert by_id["veh-3"].bbox.ground_contact == pytest.approx((25.0, 60.0))
+
+
+def test_cam0_sample_parses_scene_lane_ids():
+    frames = read_jsonl(Path(__file__).parent / "fixtures" / "cam0-sample.labels.jsonl")
+    assert len(frames) == 28
+    lanes = {obj.lane for frame in frames for obj in frame.objects}
+    assert "mich-nb-0" in lanes
+    assert "chi-eb-0" in lanes
+    debris = [obj for frame in frames for obj in frame.objects if obj.unknown]
+    assert debris
+    assert all(obj.cls == "unknown" for obj in debris)
+    # Off-lane debris still exports laneId, as null.
+    assert any(obj.lane is None for obj in debris)
+    assert frames[0].pose.agl == pytest.approx(frames[0].pose.y)
 
 
 def test_fixture_round_trip_error_is_numerical_noise():

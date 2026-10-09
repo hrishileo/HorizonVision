@@ -7,6 +7,7 @@ accuracy check. They are not copied onto the event.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from horizon_vision.events.labels import FrameLabels
@@ -28,6 +29,8 @@ class ScoredSample:
     truth_y: float
     truth_speed: float | None
     projected: bool = True
+    cls: str = "vehicle"
+    range_m: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +54,7 @@ def run_label_pipeline(
 
     for frame in frames:
         observations: list[Observation] = []
-        pending: list[tuple[str, float, float, float, float, float | None]] = []
+        pending: list[ScoredSample] = []
         for obj in frame.objects:
             label_count += 1
             estimate = estimate_ground_point(obj.bbox, frame.pose, frame.intrinsics)
@@ -71,28 +74,34 @@ def run_label_pipeline(
             )
             truth_x, truth_y = obj.truth_ground
             pending.append(
-                (
-                    obj.track_id,
-                    estimate.x,
-                    estimate.y,
-                    truth_x,
-                    truth_y,
-                    obj.truth_speed,
+                ScoredSample(
+                    t=frame.t,
+                    track_id=obj.track_id,
+                    est_x=estimate.x,
+                    est_y=estimate.y,
+                    est_speed=None,
+                    truth_x=truth_x,
+                    truth_y=truth_y,
+                    truth_speed=0.0 if obj.truth_speed is None else obj.truth_speed,
+                    cls=obj.cls,
+                    range_m=math.hypot(truth_x - frame.pose.x, truth_y - frame.pose.z),
                 )
             )
 
         events.extend(tracker.update(frame.t, observations))
-        for track_id, est_x, est_y, truth_x, truth_y, truth_speed in pending:
+        for sample in pending:
             samples.append(
                 ScoredSample(
-                    t=frame.t,
-                    track_id=track_id,
-                    est_x=est_x,
-                    est_y=est_y,
-                    est_speed=tracker.speed_of(track_id),
-                    truth_x=truth_x,
-                    truth_y=truth_y,
-                    truth_speed=0.0 if truth_speed is None else truth_speed,
+                    t=sample.t,
+                    track_id=sample.track_id,
+                    est_x=sample.est_x,
+                    est_y=sample.est_y,
+                    est_speed=tracker.speed_of(sample.track_id),
+                    truth_x=sample.truth_x,
+                    truth_y=sample.truth_y,
+                    truth_speed=sample.truth_speed,
+                    cls=sample.cls,
+                    range_m=sample.range_m,
                 )
             )
 

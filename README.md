@@ -20,7 +20,7 @@ This repo has two layers that share the same product model (sensor + objects + d
 pip install -r requirements-dev.txt
 PYTHONPATH=src python -m pytest
 PYTHONPATH=src python -m horizon_vision.events.report \
-  --fixture tests/fixtures/mag_mile_labels.jsonl
+  --fixture tests/fixtures/cam0-sample.labels.jsonl
 ```
 Contract and recorder alignment: `docs/edge-events.md`.
 

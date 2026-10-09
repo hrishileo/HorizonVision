@@ -1,16 +1,22 @@
-"""Parser for Vision-Quest recorder labels.
+"""Parser for Vision-Quest CAM0 recorder labels.
 
-This is the only module that knows the recorder's JSON keys. When that
-export lands, align field names here. Callers see :class:`FrameLabels`,
-not raw dicts.
+This is the only module that knows the recorder's JSON keys. Callers see
+:class:`FrameLabels`, not raw dicts.
 
-These records are ground-truth labels for scoring.
+These records are ground-truth labels for scoring. ``file`` names a PNG and
+is ignored; this parser does not read images.
 
 World frame (Mag Mile): ``+X`` east, ``+Y`` up, ``+Z`` south, ground ``Y = 0``.
-Angles are radians. ``focal_length`` is pixels (square pixels). ``bbox`` is
-``[u, v, w, h]`` with origin at the top-left of the image, ``+u`` right,
-``+v`` down. An ``image`` field is ignored so frames can later name a file
-without this parser loading media.
+The recorder writes that frame directly: ``camera.position``, ``camera.agl``
+(equal to world Y), Euler ``yaw`` / ``pitch`` / ``roll`` in radians (Three.js
+order YXZ), and ``intrinsics`` ``fovY``, ``fx``, ``fy``, ``cx``, ``cy``.
+Each object uses ``trackId``, ``laneId``, and ``bbox`` ``{x, y, w, h}`` with
+the origin at the top-left. ``laneId`` is a scene id such as ``mich-nb-0``,
+``chi-eb-0``, ``rush-nb-0``, or ``conn-wb-0``, or null when the point is off
+every travel lane. Debris exports ``laneId`` the same way.
+
+The earlier placeholder (``camera.pose``, ``focal_length``, ``track_id``,
+``lane``, bbox ``[u, v, w, h]``) is still accepted.
 """
 
 from __future__ import annotations
@@ -49,6 +55,16 @@ class CameraIntrinsics:
     focal_length_px: float
     cx: float
     cy: float
+    fx: float | None = None
+    fy: float | None = None
+
+    @property
+    def focal_x(self) -> float:
+        return self.focal_length_px if self.fx is None else self.fx
+
+    @property
+    def focal_y(self) -> float:
+        return self.focal_length_px if self.fy is None else self.fy
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,16 +130,23 @@ def read_jsonl(path: str | Path) -> list[FrameLabels]:
 def parse_frame(data: Mapping[str, Any]) -> FrameLabels:
     if not isinstance(data, Mapping):
         raise LabelParseError("frame must be a JSON object")
+    if "groundTruth" in data and data["groundTruth"] is not True:
+        raise LabelParseError("groundTruth must be true")
     t = _number(data.get("t"), "t")
     camera = data.get("camera")
     if not isinstance(camera, Mapping):
         raise LabelParseError("camera must be an object")
-    pose = _parse_pose(camera.get("pose"))
-    intrinsics = _parse_intrinsics(camera.get("intrinsics"))
+    corpus = "position" in camera
+    if corpus:
+        pose = _parse_corpus_pose(camera)
+        intrinsics = _parse_corpus_intrinsics(camera.get("intrinsics"))
+    else:
+        pose = _parse_pose(camera.get("pose"))
+        intrinsics = _parse_intrinsics(camera.get("intrinsics"))
     raw_objects = data.get("objects")
     if not isinstance(raw_objects, list):
         raise LabelParseError("objects must be a list")
-    objects = tuple(_parse_object(item) for item in raw_objects)
+    objects = tuple(_parse_object(item, corpus=corpus) for item in raw_objects)
     return FrameLabels(t=t, pose=pose, intrinsics=intrinsics, objects=objects)
 
 
@@ -156,6 +179,41 @@ def _parse_pose(data: Any) -> CameraPose:
     )
 
 
+def _parse_corpus_pose(camera: Mapping[str, Any]) -> CameraPose:
+    position = _mapping(camera.get("position"), "camera.position")
+    return CameraPose(
+        x=_number(position.get("x"), "camera.position.x"),
+        y=_number(position.get("y"), "camera.position.y"),
+        z=_number(position.get("z"), "camera.position.z"),
+        agl=_number(camera.get("agl"), "camera.agl"),
+        yaw=_number(camera.get("yaw"), "camera.yaw"),
+        pitch=_number(camera.get("pitch"), "camera.pitch"),
+        roll=_number(camera.get("roll"), "camera.roll"),
+    )
+
+
+def _parse_corpus_intrinsics(data: Any) -> CameraIntrinsics:
+    intr = _mapping(data, "camera.intrinsics")
+    width = _int(intr.get("width"), "width")
+    height = _int(intr.get("height"), "height")
+    fx = _number(intr.get("fx"), "camera.intrinsics.fx")
+    fy = _number(intr.get("fy"), "camera.intrinsics.fy")
+    if fx <= 0 or fy <= 0:
+        raise LabelParseError("fx and fy must be positive pixels")
+    fov = intr.get("fovY", intr.get("fov"))
+    fov_deg = _number(fov, "camera.intrinsics.fovY") if fov is not None else _fov_from_focal(fy, height)
+    return CameraIntrinsics(
+        fov_deg=fov_deg,
+        width=width,
+        height=height,
+        focal_length_px=fy,
+        cx=_number(intr.get("cx"), "camera.intrinsics.cx"),
+        cy=_number(intr.get("cy"), "camera.intrinsics.cy"),
+        fx=fx,
+        fy=fy,
+    )
+
+
 def _parse_intrinsics(data: Any) -> CameraIntrinsics:
     intr = _mapping(data, "camera.intrinsics")
     width = _int(intr.get("width"), "width")
@@ -178,9 +236,14 @@ def _parse_intrinsics(data: Any) -> CameraIntrinsics:
     )
 
 
-def _parse_object(data: Any) -> ObjectLabel:
+def _parse_object(data: Any, corpus: bool = False) -> ObjectLabel:
     obj = _mapping(data, "object")
-    track_id = _track_id(obj.get("track_id"))
+    if corpus:
+        track_id = _track_id(obj.get("trackId"))
+        lane = obj.get("laneId", None)
+    else:
+        track_id = _track_id(obj.get("track_id", obj.get("trackId")))
+        lane = obj.get("lane", obj.get("laneId", None))
     raw_class = obj.get("class")
     if raw_class not in ("vehicle", "unknown"):
         raise LabelParseError(f"object class must be 'vehicle' or 'unknown', got {raw_class!r}")
@@ -191,7 +254,6 @@ def _parse_object(data: Any) -> ObjectLabel:
     type_name = obj.get("type")
     if not isinstance(type_name, str) or not type_name:
         raise LabelParseError("type must be a non-empty string")
-    lane = obj.get("lane", None)
     if lane is not None and (not isinstance(lane, str) or not lane):
         raise LabelParseError("lane must be a non-empty string or null")
     bbox = _parse_bbox(obj.get("bbox"))
@@ -222,12 +284,14 @@ def _parse_object(data: Any) -> ObjectLabel:
 
 
 def _parse_bbox(data: Any) -> BBox:
-    if isinstance(data, Mapping):
+    if isinstance(data, Mapping) and "x" in data and "u" not in data:
+        values = [data.get("x"), data.get("y"), data.get("w"), data.get("h")]
+    elif isinstance(data, Mapping):
         values = [data.get("u"), data.get("v"), data.get("w"), data.get("h")]
     elif isinstance(data, (list, tuple)) and len(data) == 4:
         values = list(data)
     else:
-        raise LabelParseError("bbox must be [u, v, w, h] or {u, v, w, h}")
+        raise LabelParseError("bbox must be {x, y, w, h}, {u, v, w, h}, or [u, v, w, h]")
     u, v, w, h = (_number(values[i], "bbox") for i in range(4))
     if w <= 0 or h <= 0:
         raise LabelParseError("bbox width and height must be positive")

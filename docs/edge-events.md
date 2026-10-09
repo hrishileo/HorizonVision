@@ -49,41 +49,62 @@ The JSON Schema object lives at `EDGE_EVENT_JSON_SCHEMA` in
 
 ## Label file
 
-The parser in `horizon_vision.events.labels` is the only place that reads
-recorder keys. Align it there when the Vision-Quest export lands. Expected
-shape:
+The parser in `horizon_vision.events.labels` reads the CAM0 JSONL from
+Vision-Quest (`labels.jsonl`, schema 1). Y is up. The ground plane is the
+world x/z plane at `y = 0`. A frame looks like:
 
 ```json
 {
-  "t": 0.0,
+  "schema": 1,
+  "groundTruth": true,
+  "t": 1.167,
   "camera": {
-    "pose": {"x": 0.0, "y": 18.0, "z": -12.0, "agl": 18.0, "yaw": 0.0, "pitch": -0.55, "roll": 0.0},
-    "intrinsics": {"fov": 49.5, "width": 640, "height": 480, "focal_length": 520.0, "principal_point": [320.0, 240.0]}
+    "position": {"x": 5.5, "y": 7.28, "z": 34.7},
+    "agl": 7.28,
+    "yaw": 0.0,
+    "pitch": -0.39,
+    "roll": 0.0,
+    "intrinsics": {"fovY": 70, "width": 960, "height": 540, "fx": 385.6, "fy": 385.6, "cx": 480, "cy": 270}
   },
   "objects": [
     {
-      "track_id": "veh-12",
+      "trackId": "veh-0",
       "class": "vehicle",
-      "type": "car",
+      "type": "vehicle",
       "kind": null,
-      "lane": "mich-nb-1",
-      "bbox": [0, 0, 20, 10],
-      "position": {"x": 5.5, "y": 0.0, "z": 4.0},
-      "speed": 8.0
+      "laneId": "mich-nb-1",
+      "position": {"x": 5.5, "y": 0, "z": 18.4},
+      "speed": 8.7,
+      "bbox": {"x": 458.8, "y": 242.9, "w": 42.4, "h": 61.2}
+    },
+    {
+      "trackId": "deb-0",
+      "class": "unknown",
+      "type": "tire",
+      "kind": "debris",
+      "laneId": "mich-nb-2",
+      "position": {"x": 9.0, "y": 0, "z": 16.0},
+      "speed": null,
+      "bbox": {"x": 500, "y": 260, "w": 20, "h": 16}
     }
   ]
 }
 ```
 
-`image` is ignored. Angles are radians. `focal_length` is pixels. `position`
-is world metres with `y` up. `bbox` is `[u, v, w, h]` from the top-left, `+v`
-down. Integer track ids are accepted and stored as strings.
+`laneId` is the scene's 0-indexed id: `mich-nb-0` … `mich-sb-2`, `chi-eb-0` …
+`chi-wb-1`, `rush-nb-0`, `rush-nb-1`, `conn-wb-0`, or `null` when the ground
+point is off every travel lane. Debris uses the same field. `bbox` is
+`{x, y, w, h}` from the top-left of the image. `position.y` is up and is 0
+for a rig origin on the ground. `file` / `labelFile` name media and are not
+read. The placeholder keys (`camera.pose`, `track_id`, `lane`, a bbox list)
+still parse.
 
 ## Pipeline
 
 1. Parse labels.
-2. Cast the box’s bottom-center pixel through the pinhole camera and intersect
-   it with the plane `agl` metres below the camera.
+2. Cast the box’s bottom-center pixel through the CAM0 pinhole (Three.js YXZ,
+   looking down local −Z) and intersect it with the ground plane `agl` metres
+   below the camera. On recorder frames that plane is `y = 0`.
 3. Hold a track per id. Smooth position and speed (exponential, default
    α = 0.5). Speed is the smoothed magnitude of the raw ground-plane step.
 4. Emit one event per track per new timestamp after `min_hits` (default 3).
@@ -93,9 +114,15 @@ down. Integer track ids are accepted and stored as strings.
    (default 5). It must reach `min_hits` again before it emits.
 
 Published `x`/`y` are the smoothed estimates. The accuracy script scores
-three things against the label’s truth: the raw ground-plane position, the
-smoothed position on the emitted event (this lags a constant-speed track),
-and the tracked speed.
+the raw ground-plane position, the smoothed position on the emitted event,
+and the tracked speed against the label.
+
+On a recorder frame the label `position` is the rig origin, while the ray
+uses the bottom-center of the projected mesh. For a car that point is the
+near edge, about half a vehicle length from the origin, so the position
+error stays on the order of a couple of metres even when the ray is right.
+A box whose bottom-center is the true ground point (the synthetic fixture)
+comes back with only numerical error.
 
 ## Run
 
@@ -103,11 +130,11 @@ and the tracked speed.
 pip install -r requirements-dev.txt
 PYTHONPATH=src python -m pytest
 PYTHONPATH=src python -m horizon_vision.events.report \
-  --fixture tests/fixtures/mag_mile_labels.jsonl
+  --fixture tests/fixtures/cam0-sample.labels.jsonl
 ```
 
-The fixture is a short Mag Mile label clip: a car in `mich-nb-1`, a barrier
-blocking `mich-nb-2`, and a tire with no lane. Pixel boxes are the pinhole
-projection of each true ground point, so the report measures numerical
-round-trip error. Closed-form geometry (a pixel offset equals a known number
-of metres) is in `tests/test_monocular.py`.
+`tests/fixtures/cam0-sample.labels.jsonl` is the CAM0 label sample from
+Vision-Quest (no images). `tests/fixtures/mag_mile_labels.jsonl` is a short
+synthetic clip whose boxes are the same pinhole applied to known ground
+points, used to check round-trip error. Closed-form geometry is in
+`tests/test_monocular.py`.
