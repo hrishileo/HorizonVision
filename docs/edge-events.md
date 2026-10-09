@@ -138,3 +138,51 @@ Vision-Quest (no images). `tests/fixtures/mag_mile_labels.jsonl` is a short
 synthetic clip whose boxes are the same pinhole applied to known ground
 points, used to check round-trip error. Closed-form geometry is in
 `tests/test_monocular.py`.
+
+## Tailgating
+
+For consecutive vehicles in the same lane, time headway is the gap between
+the leader's rear and the follower's front, divided by the follower's speed.
+The corpus stores the rig origin, not the bumpers, and does not export
+length. The gap uses a centered length (default 4.4 m, Mag Mile `CAR_L`).
+Only `class: vehicle` rows are paired. Debris keeps its `laneId` on the
+label and is not a leader or a follower.
+
+Flag when headway is strictly below a threshold (default 2.0 s) and the
+follower is moving (default speed ≥ 1.0 m/s). A stopped or creeping follower
+is queued traffic and is not an event. A stopped leader does not change the
+test: headway uses the follower's speed only.
+
+The same follower, leader, and lane must stay under the threshold for
+`persist_s` (default 0.5 s) before the first event, and on each later frame
+while that holds. A one-frame dip does not emit. A lane change, or a new
+leader, starts the window over. Only adjacent vehicles are paired. Travel
+direction comes from the scene lane id (`nb` toward −Z, `sb` toward +Z,
+`eb` toward +X, `wb` toward −X). A non-positive gap is not a following gap.
+
+`confidence` is 1 when the positions and speeds are ground-truth labels.
+The JSON Schema object is `TAILGATE_EVENT_JSON_SCHEMA`.
+
+```json
+{
+  "follower_track_id": "veh-13",
+  "leader_track_id": "veh-12",
+  "lane": "mich-sb-0",
+  "headway_s": 1.5894965934823853,
+  "gap_m": 11.365969744954844,
+  "follower_speed": 7.15067260386727,
+  "confidence": 1.0,
+  "t": 1.6666666666666685
+}
+```
+
+```bash
+PYTHONPATH=src python -m horizon_vision.events.tailgate \
+  --fixture tests/fixtures/cam0-sample.labels.jsonl \
+  --output tests/fixtures/cam0_tailgate_events.jsonl
+```
+
+That CAM0 sample already contains close following under 2 s, including
+`veh-13` behind `veh-12` in `mich-sb-0`. The edge cases (open gap, stopped
+traffic, a shorter threshold, a one-frame blip, a lane change) are unit
+tests, not a second label file.
