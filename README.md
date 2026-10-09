@@ -11,7 +11,7 @@ This repo has two layers that share the same product model (sensor + objects + d
 
 ## Current Focus
 - Camera-only edge events for a Jetson Orin Nano (monocular; LiDAR is not on this path)
-- Label → tracked event pipeline and a ground-plane accuracy check
+- Label → tracked event pipeline, a ground-plane accuracy check, and per-lane blocked / slow / clear / unknown state
 - Tailgating from time headway on recorder labels (`docs/edge-events.md`)
 - Live 3D visualization in `web/` (lab viewer)
 - LiDAR drivers, fusion, and mapping remain in the tree and are not part of the edge-event path
@@ -22,11 +22,13 @@ pip install -r requirements-dev.txt
 PYTHONPATH=src python -m pytest
 PYTHONPATH=src python -m horizon_vision.events.report \
   --fixture tests/fixtures/cam0-sample.labels.jsonl
+PYTHONPATH=src python -m horizon_vision.events.lane_report \
+  --fixture tests/fixtures/cam0-sample.labels.jsonl
 PYTHONPATH=src python -m horizon_vision.events.tailgate \
   --fixture tests/fixtures/cam0-sample.labels.jsonl \
   --output tests/fixtures/cam0_tailgate_events.jsonl
 ```
-Contract and recorder alignment: `docs/edge-events.md`.
+Contract, lane-state fields, tailgating, and recorder alignment: `docs/edge-events.md`.
 
 ## Hub detour (Mag Mile)
 The hub turns lane-state updates into driver reroute alerts. The street graph is a few approximate blocks of Michigan Avenue plus Rush, Wabash, and the Ohio–Chicago cross streets (`horizon_vision.hub`). Michigan lane ids are the Vision-Quest scene ids from `src/lib/guide/city.ts`: `mich-nb-0`, `mich-nb-1`, `mich-nb-2`, `mich-sb-0`, `mich-sb-1`, `mich-sb-2` (inner lane is 0). Chicago Avenue crossings use `chi-eb-0` and `chi-wb-0`. A mock phone sink writes alerts as local JSONL.

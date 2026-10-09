@@ -1,9 +1,9 @@
 """Lane-state input for the hub.
 
-Edge is publishing these from a separate change that is not in this tree yet.
-The wire shape we accept is ``{lane, state, speed, confidence, t}`` with
+The edge publishes these from ``horizon_vision.events.lane_state``.
+The wire shape is ``{lane, state, speed, confidence, t}`` with
 ``state`` in ``blocked | slow | clear | unknown``. ``lane_state_from_mapping``
-is the only reader of those keys; replace it when the edge contract lands.
+is the only reader of those keys.
 """
 
 from __future__ import annotations
